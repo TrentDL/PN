@@ -2,106 +2,6 @@
 	"Version": 3,
 	"Parameters": [
 		{
-			"Id": "ParamAngleX",
-			"GroupId": "",
-			"Name": "Angle X"
-		},
-		{
-			"Id": "ParamAngleY",
-			"GroupId": "",
-			"Name": "Angle Y"
-		},
-		{
-			"Id": "ParamAngleZ",
-			"GroupId": "",
-			"Name": "Angle Z"
-		},
-		{
-			"Id": "ParamEyeLOpen",
-			"GroupId": "",
-			"Name": "EyeL Open"
-		},
-		{
-			"Id": "ParamEyeLSmile",
-			"GroupId": "",
-			"Name": "EyeL Smile"
-		},
-		{
-			"Id": "ParamEyeROpen",
-			"GroupId": "",
-			"Name": "EyeR Open"
-		},
-		{
-			"Id": "ParamEyeRSmile",
-			"GroupId": "",
-			"Name": "EyeR Smile"
-		},
-		{
-			"Id": "ParamEyeBallX",
-			"GroupId": "",
-			"Name": "Eyeball X"
-		},
-		{
-			"Id": "ParamEyeBallY",
-			"GroupId": "",
-			"Name": "Eyeball Y"
-		},
-		{
-			"Id": "ParamBrowLY",
-			"GroupId": "",
-			"Name": "BrowL Y"
-		},
-		{
-			"Id": "ParamBrowRY",
-			"GroupId": "",
-			"Name": "BrowR Y"
-		},
-		{
-			"Id": "ParamBrowLX",
-			"GroupId": "",
-			"Name": "BrowL X"
-		},
-		{
-			"Id": "ParamBrowRX",
-			"GroupId": "",
-			"Name": "BrowR X"
-		},
-		{
-			"Id": "ParamBrowLAngle",
-			"GroupId": "",
-			"Name": "BrowL Angle"
-		},
-		{
-			"Id": "ParamBrowRAngle",
-			"GroupId": "",
-			"Name": "BrowR Angle"
-		},
-		{
-			"Id": "ParamBrowLForm",
-			"GroupId": "",
-			"Name": "BrowL Form"
-		},
-		{
-			"Id": "ParamBrowRForm",
-			"GroupId": "",
-			"Name": "BrowR Form"
-		},
-		{
-			"Id": "ParamMouthForm",
-			"GroupId": "",
-			"Name": "Mouth Form"
-		},
-		{
-			"Id": "ParamMouthOpenY",
-			"GroupId": "",
-			"Name": "Mouth Open"
-		},
-		{
-			"Id": "ParamCheek",
-			"GroupId": "",
-			"Name": "Cheek"
-		},
-		{
 			"Id": "ParamBodyAngleX",
 			"GroupId": "",
 			"Name": "Body X"
@@ -317,6 +217,11 @@
 			"Name": "handOpacity5"
 		},
 		{
+			"Id": "ParamLHandOpacity3OpenPalm1",
+			"GroupId": "ParamGroup2",
+			"Name": "LhandOpacity3OpenPalm1"
+		},
+		{
 			"Id": "RhandOpacity1",
 			"GroupId": "ParamGroup3",
 			"Name": "RhandOpacity1"
@@ -335,6 +240,11 @@
 			"Id": "RhandOpacity4",
 			"GroupId": "ParamGroup3",
 			"Name": "RhandOpacity4"
+		},
+		{
+			"Id": "ParamRhandOpacity1Weap1",
+			"GroupId": "ParamGroup3",
+			"Name": "RhandOpacity1Weap1"
 		},
 		{
 			"Id": "BodOpacity1",
@@ -465,6 +375,10 @@
 			"Name": "Folder 1"
 		},
 		{
+			"Id": "Part38",
+			"Name": "Folder 4b Copy"
+		},
+		{
 			"Id": "LHandPartsFlipped",
 			"Name": "LHandPartsFlipped"
 		},
@@ -479,6 +393,10 @@
 		{
 			"Id": "Part5",
 			"Name": "L hand gripA"
+		},
+		{
+			"Id": "Part42",
+			"Name": "Layer 11 weaq"
 		},
 		{
 			"Id": "Part3",

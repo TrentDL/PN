@@ -17,6 +17,8 @@ public class PlayerControl : MonoBehaviour
 {
     static float moveSpeed = 5f, moveAccuracy = 0.15f;
 
+    #region movement fields/properties
+
     [Header("References")]
     [Tooltip("Live2D model root (drag 'objects' here). Gets lifted during jumps and flipped for facing.")]
     public Transform visualRoot;
@@ -57,6 +59,8 @@ public class PlayerControl : MonoBehaviour
 
     [Header("Boundary Settings")]
     public bool enableBoundaryChecking = true;
+
+    #endregion 
 
     void Start()
     {
@@ -247,5 +251,5 @@ public class PlayerControl : MonoBehaviour
         }
 
         myObject.position = point;
-    }
+    } //end of function >:D
 }
