@@ -137,11 +137,15 @@ namespace Live2D.Cubism.Rendering.URP.RenderingInterceptor
             set;
         }
 
+        public bool runInEditor = true;
+
         /// <summary>
         /// Called by Unity when the component is enabled.
         /// </summary>
         public void OnEnable()
         {
+            if (!Application.isPlaying && !runInEditor) return;
+
             _renderController = GetComponent<CubismRenderController>();
 
             if (!_renderController)
@@ -164,7 +168,7 @@ namespace Live2D.Cubism.Rendering.URP.RenderingInterceptor
             CubismRenderingInterceptorsManager.GetInstance().AddInterceptors(this);
 
             RenderPipelineManager.beginContextRendering += OnBeginContextRendering;
-        }
+        } // end of function
 
         /// <summary>
         /// Called by Unity when the component starts.

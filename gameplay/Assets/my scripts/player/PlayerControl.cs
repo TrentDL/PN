@@ -232,7 +232,7 @@ public class PlayerControl : MonoBehaviour
         scale.x = rawScale;
         scale.y = rawScale;
         transform.localScale = scale;
-    }
+    } //end of function >;D
 
 
     public IEnumerator PlayerMove(Transform myObject, Vector2 point)
