@@ -1,5 +1,5 @@
 // PlayerControl.cs
-// Put this on PlayerB (the root). The Live2D model ("objects") stays a child.
+// Put this on Player object (the root). The Live2D model ("objects") stays a child.
 //
 // CHANGED vs your version:
 //   * Rigidbody2D is now OPTIONAL. No RB = Transform movement in Update.
@@ -12,7 +12,6 @@ using System.Collections;
 using UnityEngine;
 
 
-
 public class PlayerControl : MonoBehaviour
 {
     static float moveSpeed = 5f, moveAccuracy = 0.15f;
@@ -22,6 +21,29 @@ public class PlayerControl : MonoBehaviour
     [Header("References")]
     [Tooltip("Live2D model root (drag 'objects' here). Gets lifted during jumps and flipped for facing.")]
     public Transform visualRoot;
+
+    // [Tooltip("Animator on the Live2D model. Drives idle/RightIdle via the facingLeft bool.")]
+    // public Animator animator;
+
+    // private bool FacingLeft = false;   // false = facing left, matches the default 'idle' state
+
+
+    [Tooltip("Animator on the left-facing model.")]
+    public Animator leftAnimator;
+    [Tooltip("Animator on the right-facing model.")]
+    public Animator rightAnimator;
+
+    private Animator ActiveAnimator => facingRight ? rightAnimator : leftAnimator;
+
+
+    [Header("Facing")]
+
+    private bool facingRight = false;   // false = facing left
+
+    [Tooltip("Left-facing model instance.")]
+    public GameObject leftModel;
+    [Tooltip("Right-facing model instance.")]
+    public GameObject rightModel;
 
     private Rigidbody2D rb;              // MAY BE NULL - always guard
     private Vector2 moveInput;
@@ -33,6 +55,11 @@ public class PlayerControl : MonoBehaviour
      [Header("Movement")]
      public float moveXspeed = 5f;
      public float moveYspeed = 2.5f;
+
+    [Tooltip("Scale movement speed with the perspective scale so motion looks consistent at any depth.")]
+    public bool scaleSpeedWithSize = true;
+    [Tooltip("Scale value at which speeds are exactly moveXspeed/moveYspeed. Set to your character's scale at the 'reference' depth.")]
+    public float referenceScale = 1f;
 
     [Header("Sprint Settings")]
     public string sprintKeyLeft = "a";
@@ -57,6 +84,13 @@ public class PlayerControl : MonoBehaviour
     private Vector3 shadowStartScale;
     private Vector3 visualStartLocalPos;
 
+    // [SerializeField] private float flipOffsetX = 0f; //unused 
+
+    // private Vector3 basePosition;
+    
+    private float currentScale = 1f;
+
+
     [Header("Boundary Settings")]
     public bool enableBoundaryChecking = true;
 
@@ -64,6 +98,8 @@ public class PlayerControl : MonoBehaviour
 
     void Start()
     {
+        /* Application.targetFrameRate = 30; //CHANGE FRAME RATE DEBUG */
+
         rb = GetComponent<Rigidbody2D>();   // fine if null
 
         if (visualRoot == null)
@@ -74,7 +110,10 @@ public class PlayerControl : MonoBehaviour
         else
         {
             visualStartLocalPos = visualRoot.localPosition;
+            visualRoot.localRotation = Quaternion.identity;   // undo any flip left over from the old method
         }
+
+
 
         if (enableBoundaryChecking && BoundsManager.Instance == null)
         {
@@ -85,6 +124,10 @@ public class PlayerControl : MonoBehaviour
         {
             shadowStartScale = playerShadow.transform.localScale;
         }
+
+        if (leftModel  != null) leftModel.SetActive(!facingRight);
+        if (rightModel != null) rightModel.SetActive(facingRight);
+        
 
 
     }//end of function >:D
@@ -100,6 +143,7 @@ public class PlayerControl : MonoBehaviour
         ApplySprintSpeed();
         UpdateFacing();
         AdjustPlayerScale();
+        ApplyScaleToSpeed();
 
         if (Input.GetKeyDown(KeyCode.Space) && !isJumping)
         {
@@ -116,6 +160,12 @@ public class PlayerControl : MonoBehaviour
         if (rb != null) ApplyMovement(Time.fixedDeltaTime);
     }
 
+
+      private void ApplyScaleToSpeed()
+    {
+        if (!scaleSpeedWithSize || referenceScale <= 0f) return;
+        moveVelocity *= currentScale / referenceScale;
+    }
 
     // Single movement path, used by either Update or FixedUpdate.
     private void ApplyMovement(float deltaTime)
@@ -143,23 +193,53 @@ public class PlayerControl : MonoBehaviour
             transform.position = new Vector3(desired.x, desired.y, transform.position.z);
     }
 
+    //     private void Awake()
+    // {
+    //     if (visualRoot != null)
+    //         basePosition = visualRoot.localPosition;
+    // }
 
-    // Cubism has no flipX. Rotating 180 on Y mirrors the model without touching scale.
-    // REQUIRES CubismRenderController -> Sorting -> Mode = BackToFrontOrder.
-    // The ...Z modes sort drawables by local Z and will render the model inside-out when rotated.
+#region Old updating facing code
+    // // Cubism has no flipX. Rotating 180 on Y mirrors the model without touching scale.
+    // // REQUIRES CubismRenderController -> Sorting -> Mode = BackToFrontOrder.
+    // // The ...Z modes sort drawables by local Z and will render the model inside-out when rotated.
+    // private void UpdateFacing()
+    // {
+    //     if (visualRoot == null || moveInput.x == 0) return;
+
+    //     bool facingLeft = moveInput.x < 0;
+    //     visualRoot.localRotation = Quaternion.Euler(0f, facingLeft ? 180f : 0f, 0f);
+    //     visualRoot.localPosition = basePosition + new Vector3(facingLeft ? flipOffsetX : 0f, 0f, 0f);
+
+    //     // ALTERNATIVE if you must keep a Z-based sorting mode - mirror instead of rotate:
+    //     // Vector3 s = visualRoot.localScale;
+    //     // s.x = Mathf.Abs(s.x) * (facingLeft ? -1f : 1f);
+    //     // visualRoot.localScale = s;
+    // }
+#endregion
+
+
+
+    // Sets intent only. CubismFacingWriter.OnLateUpdate does the actual parameter
+    // write, in a slot ordered by CubismUpdateExecutionOrder.
     private void UpdateFacing()
     {
-        if (visualRoot == null || moveInput.x == 0) return;
+        if (moveInput.x == 0) return;   // no horizontal input - keep last facing
 
-        bool facingLeft = moveInput.x < 0;
-        visualRoot.localRotation = Quaternion.Euler(0f, facingLeft ? 180f : 0f, 0f);
 
-        // ALTERNATIVE if you must keep a Z-based sorting mode - mirror instead of rotate:
-        // Vector3 s = visualRoot.localScale;
-        // s.x = Mathf.Abs(s.x) * (facingLeft ? -1f : 1f);
-        // visualRoot.localScale = s;
+        bool wantsRight = moveInput.x > 0;
+        if (wantsRight == facingRight) return;
+        facingRight = wantsRight;
+
+        if (leftModel  != null) leftModel.SetActive(!facingRight);
+        if (rightModel != null) rightModel.SetActive(facingRight);
+
+        var anim = ActiveAnimator;
+        if (anim != null) anim.SetBool("IsGrounded", !isJumping);
+        
     }
 
+    
 
     private void DetectDoubleTap()
     {
@@ -197,12 +277,16 @@ public class PlayerControl : MonoBehaviour
         isJumping = true;
         float elapsedTime = 0f;
 
+        var jumpAnim = ActiveAnimator;
+        if (jumpAnim != null) jumpAnim.SetBool("IsGrounded", false);
+
         while (elapsedTime < jumpDuration)
         {
             elapsedTime += Time.deltaTime;
             float t = elapsedTime / jumpDuration;
 
-            jumpYOffset = Mathf.Sin(t * Mathf.PI) * jumpHeight;
+            jumpYOffset = Mathf.Sin(t * Mathf.PI) * jumpHeight
+            * (scaleSpeedWithSize ? currentScale / referenceScale : 1f);
 
             Vector3 lp = visualStartLocalPos;
             lp.y = visualStartLocalPos.y + jumpYOffset;
@@ -215,7 +299,7 @@ public class PlayerControl : MonoBehaviour
             }
 
             yield return null;
-        }
+        } //end of function
 
         jumpYOffset = 0f;
         isJumping = false;
@@ -225,12 +309,20 @@ public class PlayerControl : MonoBehaviour
         {
             playerShadow.transform.localScale = shadowStartScale;
         }
+
+        isJumping = false;
+
+        var landAnim = ActiveAnimator;
+        if (landAnim != null) landAnim.SetBool("IsGrounded", true);
     }
+    
 
     private void AdjustPlayerScale()
     {
         float rawScale = PlayerScale * (PlayerRatio - transform.position.y);
         rawScale = Mathf.Max(rawScale, 0.01f);
+
+        currentScale = rawScale;
 
         Vector3 scale = transform.localScale;
         scale.x = rawScale;
