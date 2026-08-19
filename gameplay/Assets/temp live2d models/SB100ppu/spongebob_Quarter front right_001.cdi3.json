@@ -1,0 +1,19 @@
+{
+	"Version": 3,
+	"Parameters": [],
+	"ParameterGroups": [],
+	"Parts": [
+		{
+			"Id": "LeftIdle",
+			"Name": "LeftIdle"
+		},
+		{
+			"Id": "frame6",
+			"Name": "frame2"
+		},
+		{
+			"Id": "frame7",
+			"Name": "frame1"
+		}
+	]
+}

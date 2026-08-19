@@ -1,0 +1,248 @@
+{
+	"Version": 3,
+	"Parameters": [
+		{
+			"Id": "ParamLeft_Right_Opacity",
+			"GroupId": "",
+			"Name": "Left_right_Opacity"
+		},
+		{
+			"Id": "ParamAngleX",
+			"GroupId": "",
+			"Name": "Angle X"
+		},
+		{
+			"Id": "ParamAngleY",
+			"GroupId": "",
+			"Name": "Angle Y"
+		},
+		{
+			"Id": "ParamAngleZ",
+			"GroupId": "",
+			"Name": "Angle Z"
+		},
+		{
+			"Id": "ParamEyeLOpen",
+			"GroupId": "",
+			"Name": "EyeL Open"
+		},
+		{
+			"Id": "ParamEyeLSmile",
+			"GroupId": "",
+			"Name": "EyeL Smile"
+		},
+		{
+			"Id": "ParamEyeROpen",
+			"GroupId": "",
+			"Name": "EyeR Open"
+		},
+		{
+			"Id": "ParamEyeRSmile",
+			"GroupId": "",
+			"Name": "EyeR Smile"
+		},
+		{
+			"Id": "ParamEyeBallX",
+			"GroupId": "",
+			"Name": "Eyeball X"
+		},
+		{
+			"Id": "ParamEyeBallY",
+			"GroupId": "",
+			"Name": "Eyeball Y"
+		},
+		{
+			"Id": "ParamBrowLY",
+			"GroupId": "",
+			"Name": "BrowL Y"
+		},
+		{
+			"Id": "ParamBrowRY",
+			"GroupId": "",
+			"Name": "BrowR Y"
+		},
+		{
+			"Id": "ParamBrowLX",
+			"GroupId": "",
+			"Name": "BrowL X"
+		},
+		{
+			"Id": "ParamBrowRX",
+			"GroupId": "",
+			"Name": "BrowR X"
+		},
+		{
+			"Id": "ParamBrowLAngle",
+			"GroupId": "",
+			"Name": "BrowL Angle"
+		},
+		{
+			"Id": "ParamBrowRAngle",
+			"GroupId": "",
+			"Name": "BrowR Angle"
+		},
+		{
+			"Id": "ParamBrowLForm",
+			"GroupId": "",
+			"Name": "BrowL Form"
+		},
+		{
+			"Id": "ParamBrowRForm",
+			"GroupId": "",
+			"Name": "BrowR Form"
+		},
+		{
+			"Id": "ParamMouthForm",
+			"GroupId": "",
+			"Name": "Mouth Form"
+		},
+		{
+			"Id": "ParamMouthOpenY",
+			"GroupId": "",
+			"Name": "Mouth Open"
+		},
+		{
+			"Id": "ParamCheek",
+			"GroupId": "",
+			"Name": "Cheek"
+		},
+		{
+			"Id": "ParamBodyAngleX",
+			"GroupId": "",
+			"Name": "Body X"
+		},
+		{
+			"Id": "ParamBodyAngleY",
+			"GroupId": "",
+			"Name": "Body Y"
+		},
+		{
+			"Id": "ParamBodyAngleZ",
+			"GroupId": "",
+			"Name": "Body Z"
+		},
+		{
+			"Id": "ParamBreath",
+			"GroupId": "",
+			"Name": "Breath"
+		},
+		{
+			"Id": "ParamHairFront",
+			"GroupId": "",
+			"Name": "Hair Move Front"
+		},
+		{
+			"Id": "ParamHairSide",
+			"GroupId": "",
+			"Name": "Hair Move Side"
+		},
+		{
+			"Id": "ParamHairBack",
+			"GroupId": "",
+			"Name": "Hair Move Back"
+		}
+	],
+	"ParameterGroups": [],
+	"Parts": [
+		{
+			"Id": "Part11",
+			"Name": "spongebob_Quarter front right_001.psd"
+		},
+		{
+			"Id": "Part",
+			"Name": "scrolling levels"
+		},
+		{
+			"Id": "Part6",
+			"Name": "no scroll levels"
+		},
+		{
+			"Id": "Part12",
+			"Name": "RightIdle Copy"
+		},
+		{
+			"Id": "rightLeg",
+			"Name": "rightLeg"
+		},
+		{
+			"Id": "leftLeg",
+			"Name": "leftLeg"
+		},
+		{
+			"Id": "LeftIdle",
+			"Name": "LeftIdle"
+		},
+		{
+			"Id": "Part2",
+			"Name": "GL2 distant layer"
+		},
+		{
+			"Id": "GroundLayer2",
+			"Name": "GroundLayer2"
+		},
+		{
+			"Id": "GroundLayer1",
+			"Name": "GroundLayer1"
+		},
+		{
+			"Id": "Part7",
+			"Name": "Animation folder"
+		},
+		{
+			"Id": "frame5",
+			"Name": "frame5"
+		},
+		{
+			"Id": "frame4",
+			"Name": "frame4"
+		},
+		{
+			"Id": "frame3",
+			"Name": "frame3"
+		},
+		{
+			"Id": "frame2",
+			"Name": "frame2"
+		},
+		{
+			"Id": "frame1",
+			"Name": "frame1"
+		},
+		{
+			"Id": "Part13",
+			"Name": "rightLeg Copy"
+		},
+		{
+			"Id": "frame6",
+			"Name": "frame2"
+		},
+		{
+			"Id": "frame7",
+			"Name": "frame1"
+		},
+		{
+			"Id": "Part3",
+			"Name": "2"
+		},
+		{
+			"Id": "Part4",
+			"Name": "1"
+		},
+		{
+			"Id": "Part5",
+			"Name": "1"
+		},
+		{
+			"Id": "Part8",
+			"Name": "5"
+		},
+		{
+			"Id": "Part9",
+			"Name": "4"
+		},
+		{
+			"Id": "Part10",
+			"Name": "3"
+		}
+	]
+}

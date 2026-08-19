@@ -1,0 +1,10 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "sbdoodHD_001.moc3",
+		"Textures": [
+			"sbdoodHD_001.4096/texture_00.png"
+		],
+		"DisplayInfo": "sbdoodHD_001.cdi3.json"
+	}
+}

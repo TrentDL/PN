@@ -1,0 +1,10 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "BG1_001.moc3",
+		"Textures": [
+			"BG1_001.4096/texture_00.png"
+		],
+		"DisplayInfo": "BG1_001.cdi3.json"
+	}
+}

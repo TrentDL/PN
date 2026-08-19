@@ -1,0 +1,71 @@
+{
+	"Version": 3,
+	"Parameters": [
+		{
+			"Id": "ParamLeft_Right_Opacity",
+			"GroupId": "ParamGroup5",
+			"Name": "Left_right_Opacity"
+		}
+	],
+	"ParameterGroups": [
+		{
+			"Id": "ParamGroup5",
+			"GroupId": "",
+			"Name": "facing"
+		}
+	],
+	"Parts": [
+		{
+			"Id": "Part3",
+			"Name": "spongebob_Quarter front right_001.psd"
+		},
+		{
+			"Id": "Part",
+			"Name": "RightIdle Copy"
+		},
+		{
+			"Id": "rightLeg",
+			"Name": "rightLeg"
+		},
+		{
+			"Id": "leftLeg",
+			"Name": "leftLeg"
+		},
+		{
+			"Id": "LeftIdle",
+			"Name": "LeftIdle"
+		},
+		{
+			"Id": "frame5",
+			"Name": "frame5"
+		},
+		{
+			"Id": "frame4",
+			"Name": "frame4"
+		},
+		{
+			"Id": "frame3",
+			"Name": "frame3"
+		},
+		{
+			"Id": "frame2",
+			"Name": "frame2"
+		},
+		{
+			"Id": "frame1",
+			"Name": "frame1"
+		},
+		{
+			"Id": "Part2",
+			"Name": "rightLeg Copy"
+		},
+		{
+			"Id": "frame6",
+			"Name": "frame2"
+		},
+		{
+			"Id": "frame7",
+			"Name": "frame1"
+		}
+	]
+}

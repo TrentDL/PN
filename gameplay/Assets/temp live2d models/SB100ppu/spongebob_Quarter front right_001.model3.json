@@ -1,0 +1,10 @@
+{
+	"Version": 3,
+	"FileReferences": {
+		"Moc": "spongebob_Quarter front right_001.moc3",
+		"Textures": [
+			"spongebob_Quarter front right_001.8192/texture_00.png"
+		],
+		"DisplayInfo": "spongebob_Quarter front right_001.cdi3.json"
+	}
+}
