@@ -98,6 +98,15 @@ public class PlayerControl3 : MonoBehaviour
 
     private float gapTime = 0f;   // ADDED: how long we have had nothing beneath us
 
+    // ADDED: test toggle for jump momentum. ON = speed carries through the jump
+    // when you let go of the keys. OFF = releasing stops the player dead in the
+    // air, which is the old behaviour. Flip it in the Inspector while playing.
+    [Tooltip("Keep moving at takeoff speed if the movement keys are released mid-jump. Off = hard stop in the air.")]
+    public bool JumpCarryOver = true;
+
+    // ADDED: the velocity the jump started with, refreshed every grounded frame.
+    private Vector2 jumpMomentum;
+
     private float jumpYOffset = 0f;
     private bool isJumping = false;
     private Vector3 shadowStartScale;
@@ -175,6 +184,7 @@ public class PlayerControl3 : MonoBehaviour
         UpdateFacing();
         AdjustPlayerScale();   // must run before ApplyScaleToSpeed
         ApplyScaleToSpeed();
+        JumpPhysics();         // ADDED: last, so it sees the finished moveVelocity
 
         if (Input.GetKeyDown(KeyCode.Space) && !isJumping)
         {
@@ -197,6 +207,26 @@ public class PlayerControl3 : MonoBehaviour
         if (!scaleSpeedWithSize || referenceScale <= 0f) return;
         moveVelocity *= currentScale / referenceScale;
     } //end of function >:d
+
+
+    // ADDED: owns the jump momentum rule and nothing else.
+    // Must run AFTER ApplySprintSpeed and ApplyScaleToSpeed so the stored velocity
+    // is the final one, sprint and perspective scale included.
+    // Grounded: remember the current velocity as the takeoff speed.
+    // Airborne with keys held: untouched, so you can still steer mid-air.
+    // Airborne with keys released: velocity is restored to the takeoff speed.
+    private void JumpPhysics()
+    {
+        if (!isJumping)
+        {
+            jumpMomentum = moveVelocity;
+            return;
+        }
+
+        if (!JumpCarryOver) return;   // toggle off - falls through to the hard stop
+
+        if (moveInput == Vector2.zero) moveVelocity = jumpMomentum;
+    }
 
 
     // Single movement path, used by either Update or FixedUpdate.
