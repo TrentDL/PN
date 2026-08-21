@@ -82,12 +82,27 @@ public class PlayerControl3 : MonoBehaviour
     private bool isSprintingRight = false;
 
     [Header("Jump Settings")]
-    [Tooltip("Maximum height the visual rises, in local units of visualRoot's parent")]
+    [Tooltip("Maximum height the visual rises, in local units of visualRoot's parent. " +
+             "MUST exceed your tallest tile's elevation or the model passes through the ledge.")]
     public float jumpHeight = 2f;
     [Tooltip("How long the jump takes to complete")]
     public float jumpDuration = 0.5f;
     [Tooltip("Must be a CHILD of this object so it follows the player horizontally.")]
     public GameObject playerShadow;
+
+    // CHANGED (v7): was CurrentHeight, a property used to test the jump arc against a
+    // surface. Tile stepping decides at touchdown instead, so the arc's height is
+    // cosmetic and nothing reads it. This is the reach limit, and since v9 it is
+    // checked against where you LAND - it is the real difficulty knob.
+    [Tooltip("How many elevation units a single jump can climb. A tile higher than " +
+             "this above you cannot be reached, however you time the jump.")]
+    public float maxStepUp = 1.5f;
+
+    // ADDED (v8): the walk-off fall is a RATE, not a duration, so a one-tile step and
+    // a long drop take different amounts of time instead of looking identical.
+    [Tooltip("Elevation units fallen per second when walking off a ledge. " +
+             "Higher = snappier. This is a rate, so a taller drop takes longer.")]
+    public float fallSpeed = 6f;
 
     // ADDED: how long the player must be over open space before the shadow turns
     // off. This is what makes it a "large gap only" thing - crossing a hairline
@@ -109,6 +124,11 @@ public class PlayerControl3 : MonoBehaviour
 
     private float jumpYOffset = 0f;
     private bool isJumping = false;
+
+    // ADDED (v8): true while the walk-off fall is playing. Separate from isJumping
+    // because the two can never overlap and each guards different things.
+    private bool isFalling = false;
+
     private Vector3 shadowStartScale;
     private Vector3 shadowStartLocalPos;   // ADDED: authored shadow position, elevation is added to it
     private Vector3 visualStartLocalPos;
@@ -186,13 +206,17 @@ public class PlayerControl3 : MonoBehaviour
         ApplyScaleToSpeed();
         JumpPhysics();         // ADDED: last, so it sees the finished moveVelocity
 
-        if (Input.GetKeyDown(KeyCode.Space) && !isJumping)
+        // CHANGED (v8): added !isFalling. Remove that clause if you WANT a mid-air
+        // recovery jump while dropping off a ledge.
+        if (Input.GetKeyDown(KeyCode.Space) && !isJumping && !isFalling)
         {
             StartCoroutine(JumpCoroutine());
         }
 
         // No Rigidbody2D? Then movement happens here instead of FixedUpdate.
         if (rb == null) ApplyMovement(Time.deltaTime);
+
+        //Debug.Log($"ApplyMovement running, isFalling={isFalling}, elevation={elevation}", this);
     }
 
 
@@ -235,12 +259,37 @@ public class PlayerControl3 : MonoBehaviour
         Vector2 current = (rb != null) ? rb.position : (Vector2)transform.position;
         Vector2 desired = current + moveVelocity * deltaTime;
 
-        // Clamped to the single area under our feet, and skipped mid-jump so the
-        // player can cross from one ground to another.
-        if (enableBoundaryChecking && !isJumping)
+        // CHANGED (v7): was clamped to currentArea, which stopped the player dead at a
+        // ledge edge. Battletoads drops you instead, so we now only clamp when there is
+        // nothing below to fall onto.
+        // CHANGED (v8): added !isFalling. Without it the drop check re-fires every
+        // frame of the fall and restarts the coroutine, freezing the player mid-air.
+        if (enableBoundaryChecking && !isJumping && !isFalling)
         {
-            if (currentArea != null)
-                desired = currentArea.ClampInside(desired);
+            GroundArea ahead = TileStep.JumpTarget(desired, elevation, 0f);
+
+            if (ahead == null)
+            {
+                // Stepped off the tile. Anything below catches us; otherwise this is a
+                // real gap and we stop at the edge.
+                GroundArea drop = TileStep.DropTarget(desired, elevation);
+
+                // CHANGED (v8): was SetArea(drop), which snapped the model to the new
+                // height in a single frame. Now it plays out over time.
+                if (drop != null) StartCoroutine(FallCoroutine(drop, elevation));
+                else if (currentArea != null) desired = currentArea.ClampInside(desired);
+            }
+            else if (ahead != currentArea)
+            {
+                // CHANGED (v10): was an unconditional SetArea, which snapped the player
+                // down whenever JumpTarget returned a LOWER tile. JumpTarget accepts
+                // anything at or below your height, so stepping off a ledge onto the
+                // overlapping floor took this branch instead of the fall branch.
+                if (ahead.elevation < elevation)
+                    StartCoroutine(FallCoroutine(ahead, elevation));   // it is a drop
+                else
+                    SetArea(ahead);                                    // same height - snapping is correct
+            }
 
             // Extra zones - props, obstacles. Delete these two lines if your
             // project has no BoundsZone script.
@@ -300,7 +349,11 @@ public class PlayerControl3 : MonoBehaviour
     private void SetArea(GroundArea area)
     {
         currentArea = area;
+
+        // CHANGED (v7): was GroundHeightMap.HeightAt. Tiles are discrete heights, so
+        // the area's own elevation is the whole answer - no texture to sample.
         elevation = (area != null) ? area.elevation : 0f;
+
         ApplyHeights();   // CHANGED: was ApplyVisualHeight
 
         // ADDED: standing on ground always means a visible shadow, so landing (and
@@ -394,43 +447,59 @@ public class PlayerControl3 : MonoBehaviour
         float startElevation = elevation;       // height we are leaving from
         float elapsedTime = 0f;
 
-        while (elapsedTime < jumpDuration)
+                while (elapsedTime < jumpDuration)
         {
             elapsedTime += Time.deltaTime;
             float t = elapsedTime / jumpDuration;
 
+            // ADDED (v11): remember last frame's height before overwriting it. The
+            // landing test needs both to detect a CROSSING.
+            float previousHeight = startElevation + jumpYOffset;
+
             jumpYOffset = Mathf.Sin(t * Mathf.PI) * jumpHeight
                 * (scaleSpeedWithSize ? currentScale / referenceScale : 1f);
 
-            GroundArea below = GroundArea.AreaAt(transform.position);
+            float currentHeight = startElevation + jumpYOffset;
 
-            // ADDED: nothing beneath us means nothing to cast a shadow onto. The
-            // timer is what separates a real gap from the one-frame seam where two
-            // grounds meet.
-            gapTime = (below == null) ? gapTime + Time.deltaTime : 0f;
+            // ADDED (v11): Mario-style landing. Only while DESCENDING, and only if the
+            // feet passed THROUGH the tile's surface between the last frame and this
+            // one. A crossing test instead of an overlap test, so it cannot be missed
+            // at low frame rates the way v1-v6 could - that was the whole problem.
+            if (currentHeight < previousHeight)
+            {
+                GroundArea tile = TileStep.JumpTarget(transform.position, startElevation, maxStepUp);
+
+                if (tile != null && previousHeight > tile.elevation && currentHeight <= tile.elevation)
+                {
+                    // Touched down early - end the jump here rather than running out
+                    // the timer. This is what makes landing on a raised tile feel like
+                    // a real contact instead of a scheduled event.
+                    jumpYOffset = 0f;
+                    isJumping = false;
+                    SetArea(tile);
+                    yield break;
+                }
+            }
+
+            // ADDED (v9): the shadow's gap check still needs to know what is underneath
+            // right now, so it vanishes over a pit and returns over solid ground.
+            GroundArea under = TileStep.JumpTarget(transform.position, startElevation, maxStepUp);
+            gapTime = (under == null) ? gapTime + Time.deltaTime : 0f;
             SetShadowVisible(gapTime <= shadowHideDelay);
 
-            // Blend toward the height of whatever ground is under us right now,
-            // weighted by jump progress, so the arc ends level with the ledge
-            // instead of popping up on touchdown. The shadow rises with it.
-            // CHANGED: the "?? takeoffArea" fallback moved down here, since the
-            // shadow check above needs to see the real null.
-            if (below == null) below = takeoffArea;
-            elevation = Mathf.Lerp(startElevation, (below != null) ? below.elevation : 0f, t);
-
-            // CHANGED: one call now covers model position, shadow position and
-            // shadow scale. The inline shadow block that used to live here is gone.
             ApplyHeights();
 
             yield return null;
         }
 
-        jumpYOffset = 0f;
+         jumpYOffset = 0f;
         isJumping = false;
 
-        // Landing. Take the ground under us, or fall back onto the edge of the one
-        // we jumped from so the player never stands in a gap.
-        GroundArea landedOn = GroundArea.AreaAt(transform.position);
+        // CHANGED (v11): reaching here means no surface was crossed during the arc -
+        // we jumped off an edge. SetArea would snap; FallCoroutine eases us down.
+        GroundArea landedOn = TileStep.JumpTarget(transform.position, startElevation, maxStepUp);
+        if (landedOn == null) landedOn = TileStep.DropTarget(transform.position, startElevation);
+
         if (landedOn == null && takeoffArea != null)
         {
             Vector2 back = takeoffArea.ClampInside(transform.position);
@@ -438,9 +507,53 @@ public class PlayerControl3 : MonoBehaviour
             landedOn = takeoffArea;
         }
 
-        // REMOVED: the shadow reset block that used to be here - SetArea calls
-        // ApplyHeights, which restores the shadow's scale and sets its final height.
-        SetArea(landedOn);
+        if (landedOn != null && landedOn.elevation < elevation)
+            StartCoroutine(FallCoroutine(landedOn, elevation));
+        else
+            SetArea(landedOn);
+    }
+
+
+      // ADDED (v8): the fall you get from WALKING off a ledge, as opposed to jumping.
+    // Kept separate from JumpCoroutine because the shapes are genuinely different -
+    // a jump is a symmetric arc up and back down, a fall is one-way and accelerating.
+    // Sharing one coroutine would mean a mode flag threaded through every line.
+    private IEnumerator FallCoroutine(GroundArea target, float fromElevation)
+    {
+        isFalling = true;                       // ApplyMovement reads this - no drop checks while true
+
+        float toElevation = (target != null) ? target.elevation : 0f;
+        float distance = fromElevation - toElevation;
+
+        // Taller drops take longer, which is what makes a one-tile step and a long
+        // fall feel like different events instead of the same animation stretched.
+        float duration = (fallSpeed > 0f) ? distance / fallSpeed : 0f;
+        float elapsedTime = 0f;
+
+        // TEMPORARY DEBUG: delete once the snapping is diagnosed.
+        // Logs ONCE per drop  -> the !isFalling guard is working, the problem is timing.
+        // Logs REPEATEDLY     -> ApplyMovement is re-firing the drop branch every frame
+        //                        and each new coroutine starts from an already-lowered
+        //                        fromElevation, which collapses into a snap.
+        // A duration at or near 0 also explains a snap on its own - the while loop
+        // below never runs and SetArea fires in the same frame.
+        Debug.Log($"Fall started: {fromElevation} -> {toElevation}, distance {distance}, duration {duration}", this);
+
+        while (elapsedTime < duration)
+        {
+            elapsedTime += Time.deltaTime;
+            float t = elapsedTime / duration;
+
+            // Squared so it accelerates. Mathf.Lerp on its own is constant speed,
+            // which reads as floating down rather than falling.
+            elevation = Mathf.Lerp(fromElevation, toElevation, t * t);
+
+            ApplyHeights();
+            yield return null;
+        }
+
+        isFalling = false;
+        SetArea(target);   // lands us exactly on the target height and restores the shadow
     }
 
 
