@@ -118,6 +118,11 @@ public class PlayerControl3 : MonoBehaviour
 
     private float gapTime = 0f;   // ADDED: how long we have had nothing beneath us
 
+       // ADDED (v13 fix): the tile the shadow is currently drawn on. Null over a gap.
+    // Needed because `elevation` is the PLAYER's height, and during a fall those two
+    // differ - that difference is exactly what the shadow's scale should show.
+    private GroundArea shadowGround;
+
     // ADDED: test toggle for jump momentum. ON = speed carries through the jump
     // when you let go of the keys. OFF = releasing stops the player dead in the
     // air, which is the old behaviour. Flip it in the Inspector while playing.
@@ -128,6 +133,7 @@ public class PlayerControl3 : MonoBehaviour
     private Vector2 jumpMomentum;
 
     private float jumpYOffset = 0f;
+
     private bool isJumping = false;
 
     // ADDED (v8): true while a descent is playing. Separate from isJumping because
@@ -242,9 +248,16 @@ public class PlayerControl3 : MonoBehaviour
     // Grounded: remember the current velocity as the takeoff speed.
     // Airborne with keys held: untouched, so you can still steer mid-air.
     // Airborne with keys released: velocity is restored to the takeoff speed.
+    // CHANGED (v13 fix): the test was "if (!isJumping)". Since the jump was split,
+    // isJumping goes false at the apex and isFalling takes over - so from the apex
+    // down this function thought the player was grounded, overwrote jumpMomentum
+    // with the released (zero) velocity, and the carry-over died on the descent.
+    // Airborne is now BOTH halves, so the stored speed survives the whole arc.
     private void JumpPhysics()
     {
-        if (!isJumping)
+        bool airborne = isJumping || isFalling;
+
+        if (!airborne)
         {
             jumpMomentum = moveVelocity;
             return;
@@ -324,14 +337,22 @@ public class PlayerControl3 : MonoBehaviour
 
         if (playerShadow == null) return;
 
-        // ADDED: the shadow rides the ground height change.
+        // CHANGED (v13 fix): the shadow now sits on the ground BENEATH the player,
+        // not at the player's own elevation. During the ascent those are the same
+        // thing, but the fall lowers `elevation` toward the tile it is heading for,
+        // which used to drag the shadow down through the air with the model.
+        float groundHeight = (shadowGround != null) ? shadowGround.elevation : elevation;
+
         Vector3 sp = shadowStartLocalPos;
-        sp.y = shadowStartLocalPos.y + elevation;
+        sp.y = shadowStartLocalPos.y + groundHeight;
         playerShadow.transform.localPosition = sp;
 
-        // MOVED here from JumpCoroutine so the shadow's whole state lives in one
-        // function. Shrinks as the model rises, back to 1x when jumpYOffset is 0.
-        float shadowScale = (jumpHeight > 0f) ? 1f - (jumpYOffset / jumpHeight) * 0.1f : 1f;
+        // CHANGED (v13 fix): was jumpYOffset alone, which JumpCoroutine zeroes at the
+        // apex - so the scale snapped back to 1x and sat there for the whole descent.
+        // The gap between the feet and the ground below is the same number during the
+        // rise and the fall, so one expression now covers both halves.
+        float heightAboveGround = jumpYOffset + (elevation - groundHeight);
+        float shadowScale = (jumpHeight > 0f) ? 1f - (heightAboveGround / jumpHeight) * 0.1f : 1f;
         playerShadow.transform.localScale = shadowStartScale * shadowScale;
     }
 
@@ -362,6 +383,7 @@ public class PlayerControl3 : MonoBehaviour
         // ADDED: standing on ground always means a visible shadow, so landing (and
         // the fallback that puts us back on the takeoff ledge) restores it here.
         gapTime = 0f;
+        shadowGround = area;   // ADDED (v13 fix): landed - the shadow's ground is this tile
         SetShadowVisible(true);
     }
 
@@ -463,11 +485,16 @@ public class PlayerControl3 : MonoBehaviour
             jumpYOffset = Mathf.Sin(t * Mathf.PI * 0.5f) * jumpHeight
                 * (scaleSpeedWithSize ? currentScale / referenceScale : 1f);
 
-            // The shadow's gap check needs to know what is underneath right now, so it
-            // vanishes over a pit and returns over solid ground.
+
             GroundArea under = TileStep.JumpTarget(transform.position, startElevation, maxStepUp);
+            shadowGround = under;   // ADDED (v13 fix): keeps ApplyHeights' ground reference current
+
+            // CHANGED (v13 fix): was "gapTime <= shadowHideDelay", which read as true on
+            // the first gap frame because gapTime was still 0 from the last reset - one
+            // frame of shadow always survived, and a delay of 0 could never hide anything.
+            // Solid ground shows it outright; only over a gap does the timer get a say.
             gapTime = (under == null) ? gapTime + Time.deltaTime : 0f;
-            SetShadowVisible(gapTime <= shadowHideDelay);
+            SetShadowVisible(under != null || gapTime < shadowHideDelay);
 
             // CHANGED: one call now covers model position, shadow position and
             // shadow scale. The inline shadow block that used to live here is gone.
@@ -515,6 +542,15 @@ public class PlayerControl3 : MonoBehaviour
             // overlap: were the feet above the surface last frame and at or below it
             // this frame. Frame-rate independent, which the overlap tests never were.
             GroundArea tile = TileStep.JumpTarget(transform.position, fromElevation, maxStepUp);
+
+            // ADDED (v13 fix): the descent half of the shadow. Same three jobs the
+            // ascent loop already does - what is underneath, whether it is a gap, and
+            // pushing that to ApplyHeights - so the shrink keeps animating all the way
+            // to the landing instead of freezing at the apex.
+            shadowGround = tile;
+            // CHANGED (v13 fix): same off-by-one-frame test as the ascent loop.
+            gapTime = (tile == null) ? gapTime + Time.deltaTime : 0f;
+            SetShadowVisible(tile != null || gapTime < shadowHideDelay);
 
             if (tile != null && previousHeight > tile.elevation && elevation <= tile.elevation)
             {
