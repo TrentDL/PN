@@ -18,11 +18,19 @@
 //
 // CHANGED (v9): the caller now asks JumpTarget once at touchdown instead of every
 //      frame of the arc. The methods themselves did not change - the timing did.
-//      Deciding mid-arc is what made the jump feel automatic, because the game had
-//      already chosen the destination before the player finished steering.
 //
 // CHANGED: was a MonoBehaviour. Nothing here needs a GameObject - these are lookups,
 //      not behaviour - and being static-only stops it from being attached by accident.
+//
+// CHANGED (surface types): both loops skip fall-through surfaces. This same test
+//      also lives in GroundArea.AreaAt. A shared helper would need a filtering
+//      iterator or a predicate delegate, and both cost more to read later than two
+//      copies of one line.
+//
+// CHANGED (overlap pass): both tie-breaks now match GroundArea.RulingAreaAt -
+//      priority first, elevation second. WHY: these two answer "which tile do I
+//      land on" while RulingAreaAt answers "whose rules apply". If they sort
+//      differently the player can land on one tile while obeying another's rules.
 //
 // DEPTH: world Y is depth. A GroundArea polygon is a FOOTPRINT ON THE FLOOR -
 //      draw it where the object's base sits. 'elevation' lifts the visual only,
@@ -42,10 +50,20 @@ public static class TileStep
         for (int i = 0; i < GroundArea.All.Count; i++)
         {
             GroundArea a = GroundArea.All[i];
+
+            // ADDED: a surface you fall through is not a landing. Skipping it here is
+            // what makes a Pit drawn over the floor return the floor - or null when
+            // there is no floor under it, which is the signal to fall.
+            if (a.canFallThrough) continue;
+
             if (!a.Contains(worldPosition)) continue;
             if (a.elevation > fromElevation + maxStepUp) continue;   // out of reach
 
-            if (best == null || a.elevation > best.elevation) best = a;
+            // CHANGED: priority now outranks elevation, matching RulingAreaAt.
+            if (best == null
+                || a.priority > best.priority
+                || (a.priority == best.priority && a.elevation > best.elevation))
+                best = a;
         }
 
         return best;
@@ -60,10 +78,17 @@ public static class TileStep
         for (int i = 0; i < GroundArea.All.Count; i++)
         {
             GroundArea a = GroundArea.All[i];
+
+            if (a.canFallThrough) continue;   // ADDED: same reason as JumpTarget
+
             if (!a.Contains(worldPosition)) continue;
             if (a.elevation >= fromElevation) continue;   // not below us
 
-            if (best == null || a.elevation > best.elevation) best = a;
+            // CHANGED: priority now outranks elevation, matching RulingAreaAt.
+            if (best == null
+                || a.priority > best.priority
+                || (a.priority == best.priority && a.elevation > best.elevation))
+                best = a;
         }
 
         return best;

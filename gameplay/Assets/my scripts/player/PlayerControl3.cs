@@ -1,26 +1,44 @@
-// PlayerControlShadowed.cs
+// PlayerControl3.cs
 //
-// RENAMED: PlayerControlGrounded -> PlayerControlShadowed  (file must match the class)
-// Works with the SAME GroundArea.cs - that script is unchanged.
+// RENAMED: PlayerControlShadowed -> PlayerControl3  (file must match the class)
 //
-// CHANGED vs PlayerControlGrounded - all of it about the shadow:
+// CHANGED (surface types):
+//   * ADDED: a jump veto at the top of JumpCoroutine - Walls and JumpZones swallow
+//     the jump entirely. Tested ONCE at takeoff, not per frame: a jump you were
+//     allowed to start is a jump you finish.
+//   * CHANGED: the walk-off branch in ApplyMovement falls into a pit instead of
+//     clamping at its lip.
+//   * CHANGED: the fallFloor branch in FallCoroutine returns the player to the last
+//     solid ground instead of SetArea(null), which was an unrecoverable state.
+//
+// CHANGED (overlap pass):
+//   * ADDED: the confinement loop at the end of ApplyMovement. It sits OUTSIDE the
+//     !isJumping && !isFalling guard on purpose - the whole point of the lock is
+//     that it survives the jump.
+//   * CHANGED: that loop iterates GroundArea.All rather than asking RulingAreaAt.
+//     WHY: ruling picks ONE area for height/surface rules, so a pen sharing space
+//     with ordinary floor lost the tie and the clamp silently never ran.
+//     Containment is not exclusive - every locked area you are inside gets to act.
+//
+// CHANGED (confinement pass):
+//   * ADDED: blockWalkOff, checked in BOTH walk-off branches of ApplyMovement.
+//     Restores playercontrol1's hard boundary for areas that want it.
+//
+// EARLIER CHANGES - all of it about the shadow:
 //   * ADDED: shadowStartLocalPos - the shadow's authored local position, so the
 //     elevation offset can be added to it instead of overwriting it.
-//   * CHANGED: the shadow is now lifted by `elevation`, so when you jump up onto
-//     GroundBounds 2 the shadow rides up with you and sits on that ledge's
-//     surface instead of staying stuck on the lower floor.
-//   * ADDED (latest): the shadow object is deactivated while the player is over
-//     a gap - nothing under it to cast onto. shadowHideDelay keeps it on across
-//     narrow gaps so it does not flicker; only a "large" gap hides it.
-//   * The shadow is NOT lifted by jumpYOffset - it stays planted on the ground
-//     while the model arcs above it, which is what sells the jump. (If you want
-//     it glued to the feet instead, see the one-line note in ApplyHeights.)
-//   * RENAMED: ApplyVisualHeight() -> ApplyHeights(). It now owns the shadow's
-//     position and scale too, so there is exactly one place the jump/elevation
-//     values reach the visuals (DRY). The duplicate shadow-reset block at the
-//     end of JumpCoroutine is gone because of it.
+//   * CHANGED: the shadow is lifted by `elevation`, so when you jump up onto
+//     GroundBounds 2 the shadow rides up with you.
+//   * ADDED: the shadow object is deactivated while the player is over a gap.
+//     shadowHideDelay keeps it on across narrow gaps so it does not flicker.
+//   * The shadow is NOT lifted by jumpYOffset - it stays planted on the ground while
+//     the model arcs above it, which is what sells the jump. (To glue it to the feet
+//     instead, see the one-line note in ApplyHeights.)
+//   * RENAMED: ApplyVisualHeight() -> ApplyHeights(). It owns the shadow's position
+//     and scale too, so there is exactly one place the jump/elevation values reach
+//     the visuals (DRY).
 //
-// Everything else (facing, sprint, area clamping, scale-with-depth) is unchanged.
+// Everything else (facing, sprint, scale-with-depth) is unchanged.
 
 using System.Collections;
 using UnityEngine;
@@ -105,27 +123,25 @@ public class PlayerControl3 : MonoBehaviour
     public float fallAcceleration = 20f;
 
     // ADDED (v13): how far below zero the player can fall before the fall gives up.
-    // Set below your lowest tile. This is where pit handling will hook in.
+    // Set below your lowest tile. This is the pit's bottom.
     [Tooltip("Elevation at which a fall ends with nothing underneath. Set below your lowest tile.")]
     public float fallFloor = -5f;
 
-    // ADDED: how long the player must be over open space before the shadow turns
-    // off. This is what makes it a "large gap only" thing - crossing a hairline
-    // seam between two grounds never reaches this, so no flicker. Raise it if
-    // your grounds have wider seams than you want the shadow reacting to.
+    // ADDED: how long the player must be over open space before the shadow turns off.
+    // This is what makes it a "large gap only" thing - crossing a hairline seam
+    // between two grounds never reaches this, so no flicker.
     [Tooltip("Seconds over open space before the shadow is deactivated. 0 = hide the instant there is no ground below.")]
     public float shadowHideDelay = 0.08f;
 
     private float gapTime = 0f;   // ADDED: how long we have had nothing beneath us
 
-       // ADDED (v13 fix): the tile the shadow is currently drawn on. Null over a gap.
+    // ADDED (v13 fix): the tile the shadow is currently drawn on. Null over a gap.
     // Needed because `elevation` is the PLAYER's height, and during a fall those two
     // differ - that difference is exactly what the shadow's scale should show.
     private GroundArea shadowGround;
 
-    // ADDED: test toggle for jump momentum. ON = speed carries through the jump
-    // when you let go of the keys. OFF = releasing stops the player dead in the
-    // air, which is the old behaviour. Flip it in the Inspector while playing.
+    // ADDED: test toggle for jump momentum. ON = speed carries through the jump when
+    // you let go of the keys. OFF = releasing stops the player dead in the air.
     [Tooltip("Keep moving at takeoff speed if the movement keys are released mid-jump. Off = hard stop in the air.")]
     public bool JumpCarryOver = true;
 
@@ -157,6 +173,12 @@ public class PlayerControl3 : MonoBehaviour
     // jump arc can be added on top without either overwriting the other.
     private float elevation = 0f;
 
+    // ADDED (surface types): where to put the player back after falling out of a pit.
+    // Written on every area change, so it is the point you ENTERED the current ground
+    // at - deliberately not the lip you fell from, which would drop you straight back in.
+    private Vector2 lastSafePosition;
+    private GroundArea lastSafeArea;
+
     #endregion
 
 
@@ -166,7 +188,7 @@ public class PlayerControl3 : MonoBehaviour
 
         if (visualRoot == null)
         {
-            Debug.LogError("PlayerControlShadowed: visualRoot is not assigned. " +
+            Debug.LogError("PlayerControl3: visualRoot is not assigned. " +
                            "Drag the Live2D model child onto it - jumping does nothing without it.", this);
         }
         else
@@ -177,7 +199,7 @@ public class PlayerControl3 : MonoBehaviour
 
         if (animator == null)
         {
-            Debug.LogError("PlayerControlShadowed: animator is not assigned. Facing will not change.", this);
+            Debug.LogError("PlayerControl3: animator is not assigned. Facing will not change.", this);
         }
         else
         {
@@ -197,7 +219,7 @@ public class PlayerControl3 : MonoBehaviour
         currentArea = GroundArea.AreaAt(transform.position);
         if (enableBoundaryChecking && currentArea == null)
         {
-            Debug.LogWarning("PlayerControlShadowed: player did not start inside any GroundArea. " +
+            Debug.LogWarning("PlayerControl3: player did not start inside any GroundArea. " +
                              "Movement will be unbounded until it lands on one.", this);
         }
         SetArea(currentArea);   // MOVED below the shadow cache - it writes to the shadow now
@@ -243,15 +265,15 @@ public class PlayerControl3 : MonoBehaviour
 
 
     // ADDED: owns the jump momentum rule and nothing else.
-    // Must run AFTER ApplySprintSpeed and ApplyScaleToSpeed so the stored velocity
-    // is the final one, sprint and perspective scale included.
+    // Must run AFTER ApplySprintSpeed and ApplyScaleToSpeed so the stored velocity is
+    // the final one, sprint and perspective scale included.
     // Grounded: remember the current velocity as the takeoff speed.
     // Airborne with keys held: untouched, so you can still steer mid-air.
     // Airborne with keys released: velocity is restored to the takeoff speed.
     // CHANGED (v13 fix): the test was "if (!isJumping)". Since the jump was split,
     // isJumping goes false at the apex and isFalling takes over - so from the apex
-    // down this function thought the player was grounded, overwrote jumpMomentum
-    // with the released (zero) velocity, and the carry-over died on the descent.
+    // down this function thought the player was grounded, overwrote jumpMomentum with
+    // the released (zero) velocity, and the carry-over died on the descent.
     // Airborne is now BOTH halves, so the stored speed survives the whole arc.
     private void JumpPhysics()
     {
@@ -286,14 +308,31 @@ public class PlayerControl3 : MonoBehaviour
 
             if (ahead == null)
             {
-                // Stepped off the tile. Anything below catches us; otherwise this is a
-                // real gap and we stop at the edge.
-                GroundArea drop = TileStep.DropTarget(desired, elevation);
+                // ADDED (blockWalkOff): asked before anything else, because it overrules
+                // both outcomes below - no drop, no pit, just stop. Reads currentArea
+                // rather than the destination: the rule belongs to the ground you are
+                // standing on, and the destination has no area by definition here.
+                if (currentArea != null && currentArea.blockWalkOff)
+                {
+                    desired = currentArea.ClampInside(desired);
+                }
+                else
+                {
+                    // Stepped off the tile. Anything below catches us; otherwise this is
+                    // a real gap and we stop at the edge.
+                    GroundArea drop = TileStep.DropTarget(desired, elevation);
 
-                // CHANGED (v13): FallCoroutine finds its own landing now, so it only
-                // needs the height we are falling from.
-                if (drop != null) StartCoroutine(FallCoroutine(elevation));
-                else if (currentArea != null) desired = currentArea.ClampInside(desired);
+                    // CHANGED (surface types): was "if (drop != null)", which clamped at
+                    // the lip of a Pit that had nothing under it. TileStep skips
+                    // fall-through surfaces now, so a Pit reads as empty space - and
+                    // empty space INSIDE the current area is a hole, while empty space
+                    // outside it is the world's edge. That distinction is what keeps the
+                    // outer boundary clamping instead of dropping you off the map.
+                    bool insidePit = currentArea != null && currentArea.Contains(desired);
+
+                    if (drop != null || insidePit) StartCoroutine(FallCoroutine(elevation));
+                    else if (currentArea != null) desired = currentArea.ClampInside(desired);
+                }
             }
             else if (ahead != currentArea)
             {
@@ -301,7 +340,13 @@ public class PlayerControl3 : MonoBehaviour
                 // down whenever JumpTarget returned a LOWER tile. JumpTarget accepts
                 // anything at or below your height, so stepping off a ledge onto the
                 // overlapping floor took this branch instead of the fall branch.
-                if (ahead.elevation < elevation)
+                // CHANGED (blockWalkOff): a lower tile ahead is still a walk-off, so the
+                // same rule applies here. Without this, an area with blockWalkOff on
+                // would hold at its outer edge but still drop you onto anything
+                // overlapping it.
+                if (ahead.elevation < elevation && currentArea != null && currentArea.blockWalkOff)
+                    desired = currentArea.ClampInside(desired);
+                else if (ahead.elevation < elevation)
                     StartCoroutine(FallCoroutine(elevation));   // it is a drop
                 else
                     SetArea(ahead);                             // same height - snapping is correct
@@ -311,6 +356,45 @@ public class PlayerControl3 : MonoBehaviour
             // project has no BoundsZone script.
             if (!BoundsZone.IsWithinBounds(desired, "player"))
                 desired = BoundsZone.ClampToBounds(desired, "player");
+        }
+
+        // ADDED: edge crossing. Sits outside the boundary block for the same reason the
+        // movement lock does - an edge has to hold while airborne, or canJumpOver has
+        // nothing to grant an exception to.
+        // DELETE these two lines if your project has no EdgeZone script.
+        EdgeZone blocker = EdgeZone.Blocker(current, desired, isJumping || isFalling, isFalling);
+        if (blocker != null) desired = blocker.StopShortOf(current, desired);
+
+        // ADDED (overlap pass): the movement lock. Deliberately OUTSIDE the block above,
+        // so it applies while airborne too - that is the whole feature.
+        // CHANGED: was RulingAreaAt(current), which asked the overlap resolver. That was
+        // wrong in kind, not just in tuning - ruling picks ONE area for height/surface
+        // rules, so a pen sharing space with ordinary floor lost the tie and the clamp
+        // never ran. Containment is not exclusive: every locked area you are standing in
+        // gets to act, priority irrelevant.
+        // Tests 'current', not 'desired': the question is "am I in a locked pen right
+        // now". Testing the destination would let a fast frame carry you out of one.
+        for (int i = 0; i < GroundArea.All.Count; i++)
+        {
+            GroundArea a = GroundArea.All[i];
+            if (!a.lockMovementInside || !a.Contains(current)) continue;
+
+            if (a.pushBackSpeed <= 0f)
+            {
+                desired = a.ClampInside(desired);   // original clamp
+                continue;
+            }
+
+            // Only push once the move would actually leave. Pushing while safely inside
+            // would fight normal movement everywhere in the pen, not just at its wall.
+            if (a.Contains(desired)) continue;
+
+            // Direction comes from ClampInside, not from the area's centre - a
+            // centre-based push sends the player across the middle of an L-shaped or
+            // crescent pen instead of away from the wall they hit (DRY: one definition
+            // of "inward", and it already handles concave shapes).
+            Vector2 inward = (a.ClampInside(desired) - desired).normalized;
+            desired = current + inward * a.pushBackSpeed * deltaTime;
         }
 
         if (rb != null)
@@ -323,9 +407,9 @@ public class PlayerControl3 : MonoBehaviour
     // RENAMED from ApplyVisualHeight - it drives the shadow as well now.
     // The one and only place jumpYOffset / elevation reach the visuals (DRY).
     // Model  = jump arc + ground height.
-    // Shadow = ground height only, so it stays on the surface while the model
-    //          arcs above it. To glue the shadow to the feet instead, add
-    //          jumpYOffset to the line below.
+    // Shadow = ground height only, so it stays on the surface while the model arcs
+    //          above it. To glue the shadow to the feet instead, add jumpYOffset to
+    //          the line below.
     private void ApplyHeights()
     {
         if (visualRoot != null)
@@ -337,10 +421,10 @@ public class PlayerControl3 : MonoBehaviour
 
         if (playerShadow == null) return;
 
-        // CHANGED (v13 fix): the shadow now sits on the ground BENEATH the player,
-        // not at the player's own elevation. During the ascent those are the same
-        // thing, but the fall lowers `elevation` toward the tile it is heading for,
-        // which used to drag the shadow down through the air with the model.
+        // CHANGED (v13 fix): the shadow now sits on the ground BENEATH the player, not
+        // at the player's own elevation. During the ascent those are the same thing,
+        // but the fall lowers `elevation` toward the tile it is heading for, which used
+        // to drag the shadow down through the air with the model.
         float groundHeight = (shadowGround != null) ? shadowGround.elevation : elevation;
 
         Vector3 sp = shadowStartLocalPos;
@@ -368,8 +452,8 @@ public class PlayerControl3 : MonoBehaviour
     }
 
 
-    // One place that adopts an area and its height (DRY - used by Start and by the
-    // end of a jump).
+    // One place that adopts an area and its height (DRY - used by Start, by landing,
+    // and by the pit return).
     private void SetArea(GroundArea area)
     {
         currentArea = area;
@@ -378,10 +462,17 @@ public class PlayerControl3 : MonoBehaviour
         // the area's own elevation is the whole answer - no texture to sample.
         elevation = (area != null) ? area.elevation : 0f;
 
+        // ADDED (surface types): remember where solid ground was, for the pit return.
+        if (area != null)
+        {
+            lastSafeArea = area;
+            lastSafePosition = transform.position;
+        }
+
         ApplyHeights();   // CHANGED: was ApplyVisualHeight
 
         // ADDED: standing on ground always means a visible shadow, so landing (and
-        // the fallback that puts us back on the takeoff ledge) restores it here.
+        // the pit return) restores it here.
         gapTime = 0f;
         shadowGround = area;   // ADDED (v13 fix): landed - the shadow's ground is this tile
         SetShadowVisible(true);
@@ -470,6 +561,13 @@ public class PlayerControl3 : MonoBehaviour
     private IEnumerator JumpCoroutine()
     {
         if (visualRoot == null) yield break;
+
+        // ADDED (surface types): Walls and JumpZones swallow the jump. Tested once, at
+        // takeoff, rather than every frame - a jump you were allowed to start is a jump
+        // you finish, which is what keeps the arc from stalling in mid-air.
+        // CHANGED (overlap pass): CanJumpOverPoint asks only the RULING area now, so a
+        // jumpable area drawn on top of solid floor wins if its priority is higher.
+        if (!GroundArea.CanJumpOverPoint(transform.position)) yield break;
 
         isJumping = true;                       // ApplyMovement reads this - clamp is off while true
         float startElevation = elevation;       // height we are leaving from
@@ -560,11 +658,14 @@ public class PlayerControl3 : MonoBehaviour
             }
 
             // ADDED (v13): nothing caught us and we are below every tile here - a pit.
-            // fallFloor is the level the scene's base ground sits at.
+            // CHANGED (surface types): was SetArea(null), which parked the player at
+            // elevation 0 with no area and no bounds - a state nothing recovered from.
+            // The fall now ends where it should, back on the last solid ground.
             if (elevation < fallFloor)
             {
                 isFalling = false;
-                SetArea(null);      // elevation 0, no area - movement is unbounded until landing
+                transform.position = lastSafePosition;
+                SetArea(lastSafeArea);
                 yield break;
             }
 

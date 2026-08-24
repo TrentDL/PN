@@ -16,7 +16,7 @@
 	],
 	"Parts": [
 		{
-			"Id": "Part3",
+			"Id": "Part5",
 			"Name": "spongebob_Quarter front right_001.psd"
 		},
 		{
@@ -24,12 +24,12 @@
 			"Name": "RightIdle Copy"
 		},
 		{
-			"Id": "rightLeg",
-			"Name": "rightLeg"
+			"Id": "Part2",
+			"Name": "rightLeg Copy"
 		},
 		{
-			"Id": "leftLeg",
-			"Name": "leftLeg"
+			"Id": "Part3",
+			"Name": "leftLeg Copy"
 		},
 		{
 			"Id": "LeftIdle",
@@ -56,8 +56,8 @@
 			"Name": "frame1"
 		},
 		{
-			"Id": "Part2",
-			"Name": "rightLeg Copy"
+			"Id": "Part4",
+			"Name": "rightLeg Copy 2"
 		},
 		{
 			"Id": "frame6",
