@@ -8,14 +8,19 @@
 //      only if it is present - so a flat area costs one null check and no new state.
 //
 // WHY A RAMP AND NOT A HEIGHT MAP: a texture answers a float per pixel, which is
-//      the right shape, but it cannot be authored in the Scene view, has a fixed
-//      pixel-to-world ratio, and adds a sample-and-threshold step to every lookup.
-//      Two points and a lerp covers slopes, which is what the art actually needs.
+//      the right shape, but it cannot be authored in the Scene view, needs
+//      Read/Write Enabled (an uncompressed CPU copy), and adds a sample to every
+//      lookup. Two handles and a lerp covers slopes, which is what the art needs.
+//
+// KNOWN LIMIT: linear only. The height rises along ONE axis and is flat past either
+//      end. A dome or a radial cap cannot be expressed - that would need a
+//      "distance from centre" mode, which is about six lines here and no change
+//      anywhere else, because GroundArea.ElevationAt is the only seam.
 //
 // KNOWN LIMIT: TileStep and FallCoroutine still treat a tile as ONE height. The
-//      landing test samples this once at the moment of the fall, so a player who
-//      drifts sideways mid-fall lands at the height they were heading for, not the
-//      height directly beneath them. Keep ramps shallow and this is invisible.
+//      landing test samples this once per frame, so a player drifting sideways
+//      mid-fall lands at the height under them that frame, not a continuously
+//      resolved surface. Keep ramps shallow and this is invisible.
 
 using UnityEngine;
 
@@ -23,10 +28,10 @@ using UnityEngine;
 public class ElevationRamp : MonoBehaviour
 {
     [Header("Slope")]
-    [Tooltip("World position where the ramp is at its LOW height.")]
+    [Tooltip("Transform marking where the ramp is at its LOW height. Must be a DIFFERENT object to High End.")]
     public Transform lowEnd;
 
-    [Tooltip("World position where the ramp is at its HIGH height.")]
+    [Tooltip("Transform marking where the ramp is at its HIGH height.")]
     public Transform highEnd;
 
     [Tooltip("Elevation at the low end. Usually the surrounding floor's height.")]
@@ -41,6 +46,8 @@ public class ElevationRamp : MonoBehaviour
     /// <summary>Elevation at this world position, projected onto the low-to-high axis.</summary>
     // The projection is what makes this work for a polygon of any shape - the player
     // can be anywhere in the area, and only their distance ALONG the slope matters.
+    // Both handles must sit on the FLOOR PLANE, at the polygon's depth: this measures
+    // horizontal distance across the footprint, not height in the art.
     public float ElevationAt(Vector2 worldPosition)
     {
         if (lowEnd == null || highEnd == null) return lowElevation;
@@ -49,7 +56,11 @@ public class ElevationRamp : MonoBehaviour
         Vector2 axis = (Vector2)highEnd.position - low;
 
         float lengthSquared = axis.sqrMagnitude;
-        if (lengthSquared < 0.0001f) return lowElevation;   // guard: both ends in the same spot
+
+        // Guard: both handles in the same spot. Returning lowElevation makes the ramp
+        // a no-op rather than a divide-by-zero, which is the safer failure - but it
+        // is also silent, so check this first if a ramp appears to do nothing.
+        if (lengthSquared < 0.0001f) return lowElevation;
 
         // Dot product over squared length gives 0..1 along the axis. Clamped, so a
         // point past either end holds that end's height instead of extrapolating.

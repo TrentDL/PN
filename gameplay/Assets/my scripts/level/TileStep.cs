@@ -2,8 +2,7 @@
 //
 // RENAMED: TileStepper -> TileStep   (file must match the class name)
 //
-// ADDED: Battletoads-style tile stepping. Replaces GroundHeightMap and
-// PlatformBounds 
+// ADDED: Battletoads-style tile stepping. Replaces GroundHeightMap and PlatformBounds.
 //
 // WHY: earlier versions tried to make the jump ARC physically intersect a raised
 //      surface, which is why the platform was unreachable and the tolerance needed
@@ -16,21 +15,20 @@
 //      Walk    - stepping off an edge DROPS you to whatever is below, any distance.
 //      Stacking- tiles may be layered; the highest reachable one wins.
 //
-// CHANGED (v9): the caller now asks JumpTarget once at touchdown instead of every
-//      frame of the arc. The methods themselves did not change - the timing did.
-//
 // CHANGED: was a MonoBehaviour. Nothing here needs a GameObject - these are lookups,
 //      not behaviour - and being static-only stops it from being attached by accident.
 //
-// CHANGED (surface types): both loops skip fall-through surfaces. This same test
-//      also lives in GroundArea.AreaAt. A shared helper would need a filtering
-//      iterator or a predicate delegate, and both cost more to read later than two
-//      copies of one line.
+// CHANGED (surface types): both loops skip fall-through surfaces. That test also
+//      lives in GroundArea.AreaAt. A shared helper would need a filtering iterator or
+//      a predicate delegate, and both cost more to read later than two copies.
 //
-// CHANGED (overlap pass): both tie-breaks now match GroundArea.RulingAreaAt -
-//      priority first, elevation second. WHY: these two answer "which tile do I
-//      land on" while RulingAreaAt answers "whose rules apply". If they sort
-//      differently the player can land on one tile while obeying another's rules.
+// CHANGED (overlap pass): both tie-breaks match GroundArea.RulingAreaAt - priority
+//      first, elevation second. WHY: these answer "which tile do I land on" while
+//      RulingAreaAt answers "whose rules apply". Sorting differently would let the
+//      player land on one tile while obeying another's rules.
+//
+// CHANGED (ramp pass): heights come from a.ElevationAt(worldPosition), not the
+//      elevation field, so a sloped area is measured where the player actually is.
 //
 // DEPTH: world Y is depth. A GroundArea polygon is a FOOTPRINT ON THE FLOOR -
 //      draw it where the object's base sits. 'elevation' lifts the visual only,
@@ -57,12 +55,16 @@ public static class TileStep
             if (a.canFallThrough) continue;
 
             if (!a.Contains(worldPosition)) continue;
-            if (a.elevation > fromElevation + maxStepUp) continue;   // out of reach
 
-            // CHANGED: priority now outranks elevation, matching RulingAreaAt.
+            // CHANGED (ramp pass): was a.elevation. A ramped area's height depends on
+            // WHERE on it you are, so the reach test has to ask at this position.
+            float here = a.ElevationAt(worldPosition);
+
+            if (here > fromElevation + maxStepUp) continue;   // out of reach
+
             if (best == null
                 || a.priority > best.priority
-                || (a.priority == best.priority && a.elevation > best.elevation))
+                || (a.priority == best.priority && here > best.ElevationAt(worldPosition)))
                 best = a;
         }
 
@@ -82,12 +84,14 @@ public static class TileStep
             if (a.canFallThrough) continue;   // ADDED: same reason as JumpTarget
 
             if (!a.Contains(worldPosition)) continue;
-            if (a.elevation >= fromElevation) continue;   // not below us
 
-            // CHANGED: priority now outranks elevation, matching RulingAreaAt.
+            float here = a.ElevationAt(worldPosition);   // CHANGED (ramp pass)
+
+            if (here >= fromElevation) continue;   // not below us
+
             if (best == null
                 || a.priority > best.priority
-                || (a.priority == best.priority && a.elevation > best.elevation))
+                || (a.priority == best.priority && here > best.ElevationAt(worldPosition)))
                 best = a;
         }
 

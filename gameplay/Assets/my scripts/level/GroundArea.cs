@@ -29,28 +29,36 @@
 //      true            true          Pit         fall in, or jump across
 //      true            false         JumpZone    land on it, but cannot fall through
 //
-//      "Ground" (the ordinary floor) is a Wall whose interior you stand on - solid
-//      and unjumpable is exactly right for a plain floor.
-//
 // ADDED (overlap pass): lockMovementInside and priority.
-// WHY: the two bools describe WHAT an area is. They cannot describe WHICH area
+// WHY: the surface bools describe WHAT an area is. They cannot describe WHICH area
 //      answers when several cover the same point - every overlapping area was
-//      answering at once, so a jumpable hole drawn on solid floor could never win
-//      the argument. 'priority' picks the one that speaks; the bools then say what
-//      it says. 'lockMovementInside' is a separate axis again: it constrains X/Y,
-//      the other two constrain height.
+//      answering at once, so a jumpable hole drawn on solid floor could never win.
+//      'priority' picks the one that speaks; the bools then say what it says.
 //
-// ADDED (confinement pass): blockWalkOff.
-// WHY: v7 replaced playercontrol1's hard boundary with the Battletoads drop, which
-//      is right for ledges and wrong for a boxed-in room. This restores the old
-//      behaviour per-area instead of globally.
+// ADDED (confinement pass): blockWalkOff, allowWalkOffIntoGap, stopAtGroundPoint.
 //
-//      THE THREE CONFINEMENT FLAGS, which are easy to confuse:
-//        (none)              walk off = drop,  jump out = yes, fall off = yes
-//        blockWalkOff        walk off = STOP,  jump out = yes
-//        lockMovementInside  walk off = stop,  jump out = NO,  fall off = no
+//      FallCoroutine has THREE entry points, and the flags do not all reach them:
+//        1. the walk-off branch in ApplyMovement   - blockWalkOff guards it
+//        2. the step-down branch in ApplyMovement  - blockWalkOff guards it
+//        3. the apex of JumpCoroutine's ascent     - nothing prevents it
 //
-//      blockWalkOff is a fence you can hop. lockMovementInside is a sealed box.
+//      That is why blockWalkOff is NOT named "fallingDisabled": a jump's descent
+//      begins in JumpCoroutine and that flag never sees it.
+//
+// REPLACED (stop pass): disableFalling -> stopAtGroundPoint.
+// WHY: disableFalling skipped FallCoroutine entirely, so a missed jump snapped back
+//      with no motion at all - it read as a glitch. The fall was never the problem;
+//      only its OUTCOME was. stopAtGroundPoint lets the whole descent play and
+//      simply refuses to let it pass below this area's height.
+//
+//      THE CONFINEMENT FLAGS side by side:
+//        (none)              walk off = drop,  missed jump = falls to fallFloor
+//        blockWalkOff        walk off = STOP,  missed jump = falls to fallFloor
+//        stopAtGroundPoint   walk off = drop*, missed jump = falls, lands back here
+//        lockMovementInside  walk off = stop,  jump out = NO
+//
+//      * with stopAtGroundPoint on, a walk-off also stops at this height - both go
+//        through FallCoroutine. Pair with blockWalkOff off if that is unwanted.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -64,8 +72,10 @@ public class GroundArea : PolygonArea
     // ADDED: the "ground 2 sits higher" part. Visual only - the player's model is
     // lifted by this much while standing here. Leave 0 for the base floor.
     // Units match jumpHeight (local units of visualRoot's parent).
+    // NOTE: read through ElevationAt(), never directly - an ElevationRamp on this
+    // object overrides it.
     [Header("Height")]
-    [Tooltip("How high the player's model sits while standing on this ground. 0 = base floor.")]
+    [Tooltip("How high the player's model sits while standing on this ground. 0 = base floor. Ignored if an ElevationRamp is attached.")]
     public float elevation = 0f;
 
     [Header("Surface Type")]
@@ -81,35 +91,67 @@ public class GroundArea : PolygonArea
     [Header("Confinement")]
     // ADDED: restores playercontrol1's behaviour for this one area. That version had
     // no fall at all - IsWithinBounds/ClampToBounds simply stopped you at the edge.
-    // NOT the same as lockMovementInside: that one holds you in while AIRBORNE too.
-    // This one only refuses the walk-off, so a jump still carries you clear.
-    [Tooltip("ON: walking off this area's edge stops you instead of dropping you. Jumping still leaves.")]
+    // Covers the two WALK-OFF paths only. A jump's descent is not a walk-off.
+    [Tooltip("ON: walking off this area's edge stops you instead of dropping you. Jumping still leaves, and a missed jump still falls.")]
     public bool blockWalkOff = false;
 
-    // ADDED: jumping allowed, walking is not. Solves the "jump in place inside a
-    // pen" case - the player can leave the ground but cannot leave the polygon.
-    // Independent of the other two: it constrains X/Y, they constrain height.
+    // ADDED: the opposite of blockWalkOff. Normally, stepping off an edge with no tile
+    // below clamps you - that is the world's edge and stopping is correct. ON: treat
+    // it as an open drop instead, so you fall and the pit return catches you.
+    [Tooltip("ON: walking off this area with nothing below drops you instead of stopping. Pairs with fallFloor.")]
+    public bool allowWalkOffIntoGap = false;
+
+    // ADDED (stop pass): a fall that STARTS here always ends here. The descent still
+    // plays in full - the arc, the shadow shrink, the acceleration - it just cannot
+    // pass below this area's own height.
+    // REPLACES disableFalling, which skipped the coroutine entirely and snapped the
+    // player back with no motion. Keeping the animation and changing only the outcome
+    // is what makes a missed jump read as a stumble rather than a glitch.
+    [Tooltip("ON: a fall from this area stops at this area's height instead of continuing past it. The fall still animates.")]
+    public bool stopAtGroundPoint = false;
+
+    // ADDED: jumping allowed, walking is not. The player can leave the ground but not
+    // the polygon. Constrains X/Y; the surface bools constrain height.
     [Tooltip("ON: the player is clamped inside this area even while airborne. Jump straight up, but not out.")]
     public bool lockMovementInside = false;
 
     // ADDED: what a locked area does at its boundary.
-    // 0 = clamp - the player stops exactly at the edge (the original behaviour).
-    // Above 0 = push - the player is moved back inward at this speed, in world units
-    // per second. Reads better than a hard stop for force fields, and avoids the
-    // edge-jitter a clamp can produce when input keeps pressing into the boundary.
+    // 0 = clamp, the player stops exactly at the edge (original behaviour).
+    // Above 0 = push back inward at this speed, in world units per second. Reads
+    // better for a force field, and avoids the edge-jitter a clamp can produce.
     [Tooltip("0 = hard clamp at the edge. Above 0 = push the player back inward at this speed.")]
     public float pushBackSpeed = 0f;
 
     [Header("Overlap")]
     // ADDED: who wins when areas overlap. The HIGHEST priority area covering the
-    // point decides canFallThrough and canJumpOver outright, and every lower area
-    // under it is silent. Equal priorities fall back to highest elevation.
-    // NOTE: this governs SURFACE rules only. The confinement flags above are read
-    // by containment, not by ruling - see the loop in PlayerControl3.ApplyMovement.
+    // point decides the surface rules outright; equal priorities fall back to
+    // highest elevation.
+    // NOTE: governs SURFACE rules only. The confinement flags are read by
+    // containment, not by ruling - see the loop in PlayerControl3.ApplyMovement.
     [Tooltip("Higher wins when areas overlap. Leave 0 for ordinary ground.")]
     public int priority = 0;
 
-    // ADDED: one word for the pair, for gizmo colour and for debugging.
+    // ADDED (ramp pass): optional per-position elevation. Null on a flat area, which
+    // is the common case - hence the cache rather than a GetComponent per query.
+    private ElevationRamp ramp;
+    private bool rampChecked = false;
+
+    private ElevationRamp Ramp
+    {
+        get
+        {
+            // Lazy for the same reason PolygonArea.Area is: OnDrawGizmos runs in edit
+            // mode where Awake never fires.
+            if (!rampChecked)
+            {
+                ramp = GetComponent<ElevationRamp>();
+                rampChecked = true;
+            }
+            return ramp;
+        }
+    }
+
+    // ADDED: one word for the surface pair, for gizmo colour and for debugging.
     // A property rather than a stored field so the two can never disagree (DRY).
     public SurfaceType Type
     {
@@ -123,9 +165,8 @@ public class GroundArea : PolygonArea
     // CHANGED: was a public "gizmoColor" field, now derived from the type.
     // WHY: colour is now information - you can read a level's rules at a glance
     //      instead of trusting whoever set the swatch.
-    // NOTE: colour reads the two surface bools only, so a priority-1 area or a
-    //       locked pen looks the same as ordinary ground of that type. Tinting by
-    //       priority is the cheap fix if layered levels make that confusing.
+    // NOTE: colour reads the two surface bools only, so a priority-1 area, a locked
+    //       pen and a ramp all look like ordinary ground of their type.
     protected override Color GizmoColor
     {
         get
@@ -153,6 +194,14 @@ public class GroundArea : PolygonArea
         All.Remove(this);   // ADDED: keeps the list clean on scene unload / disable
     }// end of function >:D
 
+    /// <summary>This area's height at a world position. Flat areas ignore the argument.</summary>
+    // ADDED (ramp pass): the ONE place elevation is resolved. Callers must use this
+    // rather than the field, or a ramped area silently behaves as flat.
+    public float ElevationAt(Vector2 worldPosition)
+    {
+        return (Ramp != null) ? Ramp.ElevationAt(worldPosition) : elevation;
+    }// end of function >:D
+
     /// <summary>Nearest valid point inside this ground. Used to stop at the edge.</summary>
     // KEPT from BoundsManager.ClampToBounds, minus the null-collider fail-safe
     // (RequireComponent on the base now guarantees the collider exists).
@@ -169,10 +218,9 @@ public class GroundArea : PolygonArea
     /// <summary>The area whose rules apply at this point. Highest priority, then highest elevation.</summary>
     // ADDED: the single overlap resolver. AreaAt and CanJumpOverPoint were each
     // running their own scan with their own tie-break, which is exactly why
-    // overlapping areas disagreed. One scan, one winner, both questions asked of
-    // it (DRY). Note it does NOT skip fall-through areas - deciding that is the
-    // caller's job, and skipping here would let a hole be outvoted by the floor
-    // underneath it.
+    // overlapping areas disagreed. One scan, one winner, both questions asked of it.
+    // Note it does NOT skip fall-through areas - deciding that is the caller's job,
+    // and skipping here would let a hole be outvoted by the floor underneath it.
     public static GroundArea RulingAreaAt(Vector2 worldPosition)
     {
         GroundArea best = null;
@@ -182,9 +230,12 @@ public class GroundArea : PolygonArea
             GroundArea a = All[i];
             if (!a.Contains(worldPosition)) continue;
 
+            // CHANGED (ramp pass): ElevationAt, not the field - a ramp's height at
+            // this point is what should break the tie.
             if (best == null
                 || a.priority > best.priority
-                || (a.priority == best.priority && a.elevation > best.elevation))
+                || (a.priority == best.priority
+                    && a.ElevationAt(worldPosition) > best.ElevationAt(worldPosition)))
                 best = a;
         }
 
@@ -192,10 +243,9 @@ public class GroundArea : PolygonArea
     }// end of function >:D
 
     /// <summary>Which ground is under this point? Null if none, or if the ruling area is a hole.</summary>
-    // CHANGED: was its own scan over All. It asks the ruling area first now - if
-    // that area is fall-through, the point is a hole regardless of what solid
-    // ground sits beneath it. That is what makes a jumpable hole drawn on top of
-    // the floor behave as a hole.
+    // CHANGED: was its own scan over All. It asks the ruling area first now - if that
+    // area is fall-through, the point is a hole regardless of what solid ground sits
+    // beneath it. That is what makes a jumpable hole drawn on the floor behave as one.
     public static GroundArea AreaAt(Vector2 worldPosition)
     {
         GroundArea ruler = RulingAreaAt(worldPosition);
@@ -205,9 +255,9 @@ public class GroundArea : PolygonArea
     }// end of function >:D
 
     /// <summary>True if a jump can pass over this point. False = jumping is ignored here.</summary>
-    // CHANGED: was "any non-jumpable area covering the point vetoes it", which meant
-    // a plain floor underneath always won the argument against a jumpable area drawn
-    // on top. Only the ruling area is asked now - use priority to pick it.
+    // CHANGED: was "any non-jumpable area covering the point vetoes it", which meant a
+    // plain floor underneath always won against a jumpable area drawn on top. Only the
+    // ruling area is asked now - use priority to pick it.
     public static bool CanJumpOverPoint(Vector2 worldPosition)
     {
         GroundArea ruler = RulingAreaAt(worldPosition);
