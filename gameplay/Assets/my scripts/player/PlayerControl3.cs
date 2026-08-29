@@ -195,6 +195,12 @@ public class PlayerControl3 : MonoBehaviour
     private Vector2 lastSafePosition;
     private GroundArea lastSafeArea;
 
+    // ADDED: scale captured the moment a freezeScaleWhileOn area is entered.
+    // AdjustPlayerScale writes over currentScale every frame, so this is a separate
+    // value that survives that overwrite.
+    private float frozenScale = 1f;
+    private bool scaleIsFrozen = false;
+
     #endregion
 
 
@@ -492,29 +498,24 @@ public class PlayerControl3 : MonoBehaviour
     private void SetArea(GroundArea area)
     {
         currentArea = area;
-
-        // CHANGED (v7): was GroundHeightMap.HeightAt. Tiles are discrete heights, so
-        // the area's own elevation is the whole answer - no texture to sample.
-        // CHANGED (ramp pass): sampled at the player's position so a ramp adopts the
-        // right height for where they actually landed.
         elevation = (area != null) ? area.ElevationAt(transform.position) : 0f;
 
-        // ADDED (surface types): remember where solid ground was, for the pit return.
         if (area != null)
         {
             lastSafeArea = area;
             lastSafePosition = transform.position;
         }
 
-        ApplyHeights();   // CHANGED: was ApplyVisualHeight
+        // ADDED: capture the scale at the moment this area is adopted, before
+        // AdjustPlayerScale can change it further. Read by AdjustPlayerScale below.
+        scaleIsFrozen = area != null && area.freezeScaleWhileOn;
+        if (scaleIsFrozen) frozenScale = currentScale;
 
-        // ADDED: standing on ground always means a visible shadow, so landing (and the
-        // pit return) restores it here.
+        ApplyHeights();
         gapTime = 0f;
-        shadowGround = area;   // ADDED (v13 fix): landed - the shadow's ground is this tile
+        shadowGround = area;
         SetShadowVisible(true);
-    }
-
+    }// end of function >:D
 
     #region Old facing implementations (kept for reference)
     // 1. ROTATION FLIP - rotated visualRoot 180 on Y. Required
@@ -785,6 +786,10 @@ public class PlayerControl3 : MonoBehaviour
 
     private void AdjustPlayerScale()
     {
+       // ADDED: skip the recompute entirely while frozen, so currentScale (and
+        // therefore transform.localScale) holds steady at whatever it was on entry.
+        if (scaleIsFrozen) return;
+
         float rawScale = PlayerScale * (PlayerRatio - transform.position.y);
         rawScale = Mathf.Max(rawScale, 0.01f);
 

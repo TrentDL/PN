@@ -78,6 +78,13 @@ public class GroundArea : PolygonArea
     [Tooltip("How high the player's model sits while standing on this ground. 0 = base floor. Ignored if an ElevationRamp is attached.")]
     public float elevation = 0f;
 
+    // ADDED: perspective scale is driven by world Y (depth), but an elevated platform
+    // visually lifts the player without moving them in depth - so the scale can look
+    // wrong while standing on one. This is a stopgap: it freezes scale at whatever it
+    // was on entry, it does not compute a "correct" one.
+    [Tooltip("ON: perspective scale stops updating while standing on this area. Temporary fix for depth perception on elevated platforms.")]
+    public bool freezeScaleWhileOn = false;
+
     [Header("Surface Type")]
     // ADDED: is there anything to stand on here?
     [Tooltip("OFF: solid, the player stands on it.  ON: open space, the player falls through it.")]
