@@ -390,7 +390,7 @@ public class PlayerControl3 : MonoBehaviour
         // movement lock does - an edge has to hold while airborne, or canJumpOver has
         // nothing to grant an exception to.
         // DELETE these two lines if your project has no EdgeZone script.
-        EdgeZone blocker = EdgeZone.Blocker(current, desired, isJumping || isFalling, isFalling);
+        EdgeZone blocker = EdgeZone.Blocker(current, desired, isJumping || isFalling, isFalling, elevation);
         if (blocker != null) desired = blocker.StopShortOf(current, desired);
 
         // ADDED (overlap pass): the movement lock. Deliberately OUTSIDE the block above,

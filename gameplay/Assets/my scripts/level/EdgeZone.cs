@@ -41,6 +41,13 @@ public class EdgeZone : MonoBehaviour
     [Tooltip("ON: the player can cross this line while airborne (jumping or falling).")]
     public bool canJumpOver = false;
 
+    // ADDED: the elevation the player's OWN height must reach before canJumpOver /
+    // canFallThrough are allowed to grant passage. Below this, the edge blocks
+    // regardless of those bools - matches the sketch: the wall holds until the
+    // green dot (the root transform) clears the block's top.
+    [Tooltip("0 = no gate, existing behaviour. Above 0: canJumpOver/canFallThrough only apply once the player's elevation reaches this height.")]
+    public float heightGateThreshold = 0f;
+
     [Tooltip("ON: the player can cross this line while falling. A one-way ledge on its own.")]
     public bool canFallThrough = false;
 
@@ -81,7 +88,7 @@ public class EdgeZone : MonoBehaviour
     // The one public question. Returns the blocking edge, or null if the move is
     // clear - returning the edge rather than a bool so the caller can clamp against
     // it instead of only being told "no".
-    public static EdgeZone Blocker(Vector2 from, Vector2 to, bool airborne, bool falling)
+    public static EdgeZone Blocker(Vector2 from, Vector2 to, bool airborne, bool falling, float playerElevation)
     {
         EdgeZone best = null;
 
@@ -89,10 +96,12 @@ public class EdgeZone : MonoBehaviour
         {
             EdgeZone z = All[i];
 
-            // Ask permission BEFORE the geometry test - it is far cheaper, and most
-            // edges are permissive for whatever the player is currently doing.
-            if (falling && z.canFallThrough) continue;
-            if (airborne && z.canJumpOver) continue;
+            // ADDED: the gate. Below threshold, this edge ignores its own permission
+            // bools entirely - it behaves as if both were false, same as a solid wall.
+            bool gateOpen = playerElevation >= z.heightGateThreshold;
+
+            if (gateOpen && falling && z.canFallThrough) continue;
+            if (gateOpen && airborne && z.canJumpOver) continue;
 
             if (!z.CrossedBy(from, to)) continue;
 
