@@ -54,6 +54,13 @@ public static class TileStep
             // there is no floor under it, which is the signal to fall.
             if (a.canFallThrough) continue;
 
+            // ADDED (pit fix): a higher-priority fall-through area covering this point means
+            // there is no floor here, even though THIS area is solid. Without this, a pit
+            // drawn over the base floor is invisible to the walk-off check - the floor
+            // underneath still answers, so the player walks across the pit.
+            GroundArea ruler = GroundArea.RulingAreaAt(worldPosition);
+            if (ruler != null && ruler != a && ruler.canFallThrough) continue;
+
             if (!a.Contains(worldPosition)) continue;
 
             // CHANGED (ramp pass): was a.elevation. A ramped area's height depends on

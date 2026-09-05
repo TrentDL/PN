@@ -51,14 +51,53 @@
 //      only its OUTCOME was. stopAtGroundPoint lets the whole descent play and
 //      simply refuses to let it pass below this area's height.
 //
-//      THE CONFINEMENT FLAGS side by side:
-//        (none)              walk off = drop,  missed jump = falls to fallFloor
-//        blockWalkOff        walk off = STOP,  missed jump = falls to fallFloor
-//        stopAtGroundPoint   walk off = drop*, missed jump = falls, lands back here
-//        lockMovementInside  walk off = stop,  jump out = NO
+// ADDED (Drop Target toggle): dropTarget.
+// WHY: the fall-fix (rejecting a tile above the falling player) is correct by
+//      default but level-specific, so it can be switched off per-area if it ever
+//      conflicts with a level built before it existed.
 //
-//      * with stopAtGroundPoint on, a walk-off also stops at this height - both go
-//        through FallCoroutine. Pair with blockWalkOff off if that is unwanted.
+// ADDED (tuning pass): fallFloorOverride, maxStepUpOverride.
+// WHY: fallFloor and maxStepUp used to be single global values on PlayerControl3,
+//      so every pit had the same bottom and every ledge had the same reach. These
+//      are OPTIONAL per-area overrides, not a move - the player's fields remain the
+//      default for any area that leaves these untouched. maxStepUpOverride is read
+//      from the area the player is JUMPING FROM, since the destination area is not
+//      known until the jump lands; reachability is a property of where you left.
+//
+// CHANGED (ownership pass): fallFloorOverride -> fallFloor, maxStepUpOverride ->
+//      maxStepUp, and ResolveFallFloor/ResolveMaxStepUp -> the static FallFloorFor/
+//      MaxStepUpFor. The values now live HERE outright rather than deferring to
+//      PlayerControl3, so both sentinels (-9999f, -1f) are gone.
+// WHY: a sentinel is only readable next to the field it defers to - "-9999" means
+//      nothing on its own. A plain value with a sensible initializer reads by
+//      itself, and the "no current area" fallback that PlayerControl3 wrote out as
+//      a ternary at each call site is folded into the static helpers (DRY).
+// NOTE THE TRADE: the single global tuning knob is gone with it. Retuning every
+//      area now means touching every area. The tuning-pass design above was the
+//      better fit while most areas were unconfigured; this one is better once the
+//      ground itself is the thing you tune.
+
+// ADDED (wall pass): blockEntry, heightGateThreshold.
+// WHY: the goal was a block that is SOLID on foot and passable over the top - the
+//      polygon equivalent of an EdgeZone with a height gate.
+//
+// REJECTED ON THE WAY THERE - a crossing gate (crossingGateThreshold +
+//      CrossingBlocker, built on a segment-vs-boundary test ported into
+//      PolygonArea). It could not work, and the reason is worth keeping:
+//      CrossedBy only fires on the FRAME THE BOUNDARY IS TOUCHED. It has no opinion
+//      about a player already standing inside, so walking around within the polygon
+//      was never blocked. A LINE has no interior, which is why the same test is
+//      correct on EdgeZone and wrong here.
+//
+// WHAT WORKS INSTEAD: Contains(), the test this class already had. Entry is
+//      "outside last frame, inside this frame", which is a pair of Contains calls
+//      and needs no new geometry at all. See the confinement loop in
+//      PlayerControl3.ApplyMovement.
+//
+// NOTE: blockEntry is the INVERSE of lockMovementInside, not a variant of it. That
+//      flag keeps a player who is INSIDE from leaving; this keeps a player who is
+//      OUTSIDE from entering. The two are mutually exclusive per frame - the loop
+//      guards on Contains(current) - so they cannot share one bool.
 
 using System.Collections.Generic;
 using UnityEngine;
@@ -111,9 +150,6 @@ public class GroundArea : PolygonArea
     // ADDED (stop pass): a fall that STARTS here always ends here. The descent still
     // plays in full - the arc, the shadow shrink, the acceleration - it just cannot
     // pass below this area's own height.
-    // REPLACES disableFalling, which skipped the coroutine entirely and snapped the
-    // player back with no motion. Keeping the animation and changing only the outcome
-    // is what makes a missed jump read as a stumble rather than a glitch.
     [Tooltip("ON: a fall from this area stops at this area's height instead of continuing past it. The fall still animates.")]
     public bool stopAtGroundPoint = false;
 
@@ -122,12 +158,86 @@ public class GroundArea : PolygonArea
     [Tooltip("ON: the player is clamped inside this area even while airborne. Jump straight up, but not out.")]
     public bool lockMovementInside = false;
 
+    // ADDED (wall pass): the inverse of lockMovementInside above - that one keeps you
+    // IN, this one keeps you OUT. Turns the polygon into a solid obstacle on foot.
+    // Pair it with heightGateThreshold to make it passable over the top; leave that
+    // at 0 and this is an unconditional wall.
+    // NOTE: this is about the FOOTPRINT, not the surface. canFallThrough/canJumpOver
+    // still describe what the ground here IS - blockEntry describes whether you may
+    // walk onto it at all.
+    [Tooltip("ON: the player cannot WALK into this area. Set Height Gate Threshold to let them jump over it.")]
+    public bool blockEntry = false;
+
+    // ADDED (wall pass): ported from EdgeZone.heightGateThreshold, and gating the
+    // same kind of thing - a permission that only opens once the player is high
+    // enough. Here it guards blockEntry above.
+    //
+    // The height compared against is the player's TOTAL height, ground elevation
+    // plus the jump arc. PlayerControl3 supplies that sum; see the note at the
+    // confinement loop for why the player has to compute it.
+    //
+    // 0 = no gate, so blockEntry alone is a wall of infinite height. Set this to the
+    // block's visual height to get "solid on foot, clears in a jump".
+    [Tooltip("0 = the wall is absolute. Above 0: the player may enter once their total height (ground + jump arc) reaches this.")]
+    public float heightGateThreshold = 0f;
+
     // ADDED: what a locked area does at its boundary.
     // 0 = clamp, the player stops exactly at the edge (original behaviour).
     // Above 0 = push back inward at this speed, in world units per second. Reads
     // better for a force field, and avoids the edge-jitter a clamp can produce.
     [Tooltip("0 = hard clamp at the edge. Above 0 = push the player back inward at this speed.")]
     public float pushBackSpeed = 0f;
+
+    [Header("Fall Tuning")]
+    // ADDED: per-area override of PlayerControl3.fallFloor. Negative sentinel means
+    // "use the player's global value" - most areas never touch this, so a level does
+    // not need to configure it everywhere just to give one pit a shallower bottom.
+    //
+    // CHANGED (ownership pass): RENAMED fallFloorOverride -> fallFloor. It is no
+    // longer an override of anything - PlayerControl3 has no fallFloor to override.
+    // The -9999f sentinel is replaced by the DefaultFallFloor initializer, so an
+    // unconfigured area reads as the same number it used to borrow.
+    [Tooltip("Elevation at which a fall starting on this area gives up and returns the player to safe ground.")]
+    public float fallFloor = DefaultFallFloor;
+
+    // ADDED: per-area override of PlayerControl3.maxStepUp. Read from the area the
+    // player is JUMPING FROM - the destination area is not known until the jump
+    // lands, so reachability is decided by where the player left, not where they
+    // are headed.
+    //
+    // CHANGED (ownership pass): RENAMED maxStepUpOverride -> maxStepUp, same reason.
+    // The "read from the area you are JUMPING FROM" rule above is unchanged - it is
+    // still the caller in PlayerControl3 that decides which area is asked.
+    [Tooltip("Reach of a single jump's climb, for jumps starting on this area, in elevation units.")]
+    public float maxStepUp = DefaultMaxStepUp;
+
+    // ADDED (ownership pass): the values used when the player is inside NO area -
+    // startup before the first SetArea, and any fall that begins off-area. const
+    // rather than a serialized field because there is no object to hang it on in
+    // that case; one constant each, so the two call sites in PlayerControl3 cannot
+    // drift apart (DRY).
+    // Microsoft C# - const: https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/const
+    public const float DefaultFallFloor = -5f;
+    public const float DefaultMaxStepUp = 1.5f;
+
+    /// <summary>fallFloor to use for a fall starting on this area. Null-tolerant - a null area gets the default.</summary>
+    // CHANGED (ownership pass): was the instance method ResolveFallFloor(float).
+    // WHY static: the null-area case was a ternary written out at the call site in
+    // PlayerControl3, and an instance method cannot answer for a null instance. The
+    // area is the argument now, so the player asks one question and never repeats
+    // the fallback. WHY no parameter: there is no global default left to pass in.
+    // Microsoft C# - static members: https://learn.microsoft.com/en-us/dotnet/csharp/programming-guide/classes-and-structs/static-classes-and-static-class-members
+    public static float FallFloorFor(GroundArea area)
+    {
+        return (area != null) ? area.fallFloor : DefaultFallFloor;
+    }// end of function >:D
+
+    /// <summary>maxStepUp to use for a jump starting on this area. Null-tolerant - a null area gets the default.</summary>
+    // CHANGED (ownership pass): was the instance method ResolveMaxStepUp(float).
+    public static float MaxStepUpFor(GroundArea area)
+    {
+        return (area != null) ? area.maxStepUp : DefaultMaxStepUp;
+    }// end of function >:D
 
     [Header("Overlap")]
     // ADDED: who wins when areas overlap. The HIGHEST priority area covering the
@@ -137,6 +247,14 @@ public class GroundArea : PolygonArea
     // containment, not by ruling - see the loop in PlayerControl3.ApplyMovement.
     [Tooltip("Higher wins when areas overlap. Leave 0 for ordinary ground.")]
     public int priority = 0;
+
+    [Header("Fall Landing")]
+    // ADDED (Drop Target toggle): whether the "tile above the falling player" fix
+    // applies to falls that start on this area. Default true because the fix
+    // corrects a real bug (a raised platform could hide the floor beneath it); the
+    // flag exists as an escape hatch, not as something normally turned off.
+    [Tooltip("ON (default): a fall rejects tiles above the player and drops to whatever is genuinely below. OFF: restores the old JumpTarget-only landing, which can hide a floor under a raised platform.")]
+    public bool dropTarget = true;
 
     // ADDED (ramp pass): optional per-position elevation. Null on a flat area, which
     // is the common case - hence the cache rather than a GetComponent per query.
