@@ -463,7 +463,9 @@ public class PlayerControl3 : MonoBehaviour
         float heightAboveGround = jumpYOffset + (elevation - groundHeight);
         float shadowScale = (jumpHeight > 0f) ? 1f - (heightAboveGround / jumpHeight) * 0.1f : 1f;
         playerShadow.transform.localScale = shadowStartScale * shadowScale;
-    }
+        
+    } //end of function >:D
+
 
 
     private void SetShadowVisible(bool visible)
