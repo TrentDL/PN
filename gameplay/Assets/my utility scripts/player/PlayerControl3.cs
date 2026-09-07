@@ -155,6 +155,13 @@ public class PlayerControl3 : MonoBehaviour
     [Tooltip("Must be a CHILD of this object so it follows the player horizontally.")]
     public GameObject playerShadow;
 
+     // ADDED (depth decoupling): world units per elevation unit. Fixed on purpose -
+    // this is what makes a platform's surface land in the same place regardless of
+    // how far back the player is standing. Set it to whatever parentScaleY reads at
+    // the depth your platforms were authored at, then tune platform elevations once.
+    [Tooltip("World units per elevation unit. Fixed - does not vary with depth.")]
+    public float elevationToWorld = 5.5f;
+
     // REMOVED (ownership pass): public float maxStepUp = 1.5f;
     // Moved to GroundArea.maxStepUp, with GroundArea.DefaultMaxStepUp as the
     // no-area fallback. Read via GroundArea.MaxStepUpFor(currentArea).
@@ -455,6 +462,23 @@ public class PlayerControl3 : MonoBehaviour
             Vector3 lp = visualStartLocalPos;
             lp.y = visualStartLocalPos.y + jumpYOffset + elevation;
             visualRoot.localPosition = lp;
+
+            // CHANGED (depth decoupling): elevation is divided by currentScale so the
+            // parent transform's multiplication cancels it, leaving a FIXED world
+            // lift of elevation * elevationToWorld at any depth.
+            //
+            // WHY: localPosition is scaled by the parent, and the parent's scale IS
+            // currentScale (see AdjustPlayerScale). So the old line lifted the player
+            // elevation * currentScale world units - 5.164 at the back of the room,
+            // 6.062 at the front. The platform sprite is a fixed world object and does
+            // not rescale, so the player slid relative to a surface that never moved.
+            //
+            // jumpYOffset is deliberately NOT divided: the arc SHOULD look bigger up
+            // close, and JumpCoroutine already multiplies it by scale for that reason.
+            float lift = (currentScale > 0.0001f)
+                ? elevation * elevationToWorld / currentScale
+                : elevation * elevationToWorld;
+    
         }
 
         if (playerShadow == null) return;
@@ -720,7 +744,7 @@ public class PlayerControl3 : MonoBehaviour
             {
                 isFalling = false;
                 SetArea(fallGuard);
-                LogVisualHeight($"land-on-{tile.name}");
+                LogVisualHeight($"land-on-fallguard-{fallGuard.name}");
                 yield break;
             }
 
@@ -730,7 +754,7 @@ public class PlayerControl3 : MonoBehaviour
                 isFalling = false;
                 transform.position = lastSafePosition;
                 SetArea(lastSafeArea);
-                LogVisualHeight($"land-on-{tile.name}");
+                LogVisualHeight("land-on-fallfloor-recovery");
                 yield break;
             }
 
