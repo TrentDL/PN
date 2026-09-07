@@ -218,6 +218,13 @@ public class PlayerControl3 : MonoBehaviour
     private float frozenScale = 1f;
     private bool scaleIsFrozen = false;
 
+    [Header(" TEMP Debug")]
+    // ADDED (visual offset diagnosis): off by default so the log costs nothing in
+    // normal play. Tick it only while chasing the height bug.
+    [Tooltip("Log visualRoot's height at takeoff and at every landing.")]
+    public bool logVisualHeight = false;
+
+
     #endregion
 
 
@@ -467,6 +474,28 @@ public class PlayerControl3 : MonoBehaviour
     } //end of function >:D
 
 
+    // ADDED (visual offset diagnosis): reports what ApplyHeights MEANT to apply
+    // against what visualRoot actually ended up at. Kept separate from ApplyHeights
+    // so that function keeps its single job - this one only reads and prints.
+    private void LogVisualHeight(string moment)
+    {
+        if (!logVisualHeight || visualRoot == null) return;
+
+        float baseY    = visualStartLocalPos.y;
+        float localY   = visualRoot.localPosition.y;
+        float applied  = localY - baseY;              // what is actually on the transform
+        float intended = jumpYOffset + elevation;      // what ApplyHeights composes
+        float parentScaleY = (visualRoot.parent != null) ? visualRoot.parent.lossyScale.y : 1f;
+
+        Debug.Log(
+            $"[{moment}] area={(currentArea ? currentArea.name : "null")} " +
+            $"elev={elevation:F3} jumpY={jumpYOffset:F3} intended={intended:F3} " +
+            $"applied={applied:F3} | localY={localY:F3} baseY={baseY:F3} " +
+            $"worldY={visualRoot.position.y:F3} | scale={currentScale:F3} " +
+            $"parentScaleY={parentScaleY:F3}", this);
+    }// end of function >:D
+
+
 
     private void SetShadowVisible(bool visible)
     {
@@ -588,6 +617,8 @@ public class PlayerControl3 : MonoBehaviour
         float scale = scaleSpeedWithSize ? currentScale / referenceScale : 1f;
         float minRise = tapJumpHeight * scale;
 
+        LogVisualHeight("takeoff");  
+
         while (elapsedTime < jumpDuration)
         {
             elapsedTime += Time.deltaTime;
@@ -609,10 +640,12 @@ public class PlayerControl3 : MonoBehaviour
             if (!Input.GetKey(KeyCode.Space) && jumpYOffset >= minRise) break;
 
             yield return null;
+        
         }
 
         elevation = startElevation + jumpYOffset;
         jumpYOffset = 0f;
+        LogVisualHeight("apex-resolved"); 
         isJumping = false;
 
         // ADDED (variable jump): the ascent's speed at the moment it ended, as a
@@ -679,6 +712,7 @@ public class PlayerControl3 : MonoBehaviour
             {
                 isFalling = false;
                 SetArea(tile);
+                LogVisualHeight($"land-on-{tile.name}");
                 yield break;
             }
 
@@ -686,6 +720,7 @@ public class PlayerControl3 : MonoBehaviour
             {
                 isFalling = false;
                 SetArea(fallGuard);
+                LogVisualHeight($"land-on-{tile.name}");
                 yield break;
             }
 
@@ -695,6 +730,7 @@ public class PlayerControl3 : MonoBehaviour
                 isFalling = false;
                 transform.position = lastSafePosition;
                 SetArea(lastSafeArea);
+                LogVisualHeight($"land-on-{tile.name}");
                 yield break;
             }
 

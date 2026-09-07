@@ -256,6 +256,29 @@ public class GroundArea : PolygonArea
     [Tooltip("ON (default): a fall rejects tiles above the player and drops to whatever is genuinely below. OFF: restores the old JumpTarget-only landing, which can hide a floor under a raised platform.")]
     public bool dropTarget = true;
 
+    [Header("Debug Visualization")]
+    // ADDED (walkable preview): draws this area's polygon lifted to its own
+    // elevation, so the Scene view shows where the player will actually STAND
+    // rather than only where the footprint sits on the floor.
+    //
+    // WHY THIS IS NEEDED: a GroundArea polygon is a FOOTPRINT - see TileStep's
+    // DEPTH note. 'elevation' lifts the visual only, so the collider gizmo stays
+    // planted at the base while the player is drawn 'elevation' units higher.
+    // The two never coincide, which is the visual disconnect.
+    [Tooltip("Draw a second outline at this area's elevation - the surface the player will walk on.")]
+    public bool showWalkablePreview = true;
+
+        // ADDED (walkable preview): world units per elevation unit. This is the player's
+    // parent scale - PlayerControl3 applies elevation to visualRoot.localPosition,
+    // which the parent transform then scales. There is no way to read it from here
+    // (the player is not this area's business), so it is authored.
+    //
+    // CAVEAT: AdjustPlayerScale changes that scale with depth, so this is only exact
+    // at one depth. If the preview drifts as you move the player in Y, that is the
+    // same coupling described below - not a bug in the gizmo.
+    [Tooltip("World units per elevation unit. Match the parentScaleY your player logs.")]
+    public float elevationToWorld = 5.349f;
+
     // ADDED (ramp pass): optional per-position elevation. Null on a flat area, which
     // is the common case - hence the cache rather than a GetComponent per query.
     private ElevationRamp ramp;
@@ -275,6 +298,59 @@ public class GroundArea : PolygonArea
             return ramp;
         }
     }
+
+
+    void OnDrawGizmos()
+    {
+        if (!showWalkablePreview || Area == null || elevation == 0f) return;
+
+        // The player's height is applied in LOCAL units of visualRoot's parent and
+        // then scaled by that parent, so one elevation unit is worth
+        // 'elevationToWorld' world units. Set this to the parentScaleY your
+        // LogVisualHeight prints (5.349 in the current scene).
+        float lift = elevation * elevationToWorld;
+
+        Gizmos.color = new Color(1f, 0.3f, 0.4f, 0.9f);   // the pink layer in the mockup
+
+        for (int p = 0; p < Area.pathCount; p++)
+        {
+            Vector2[] path = Area.GetPath(p);
+
+            for (int i = 0; i < path.Length; i++)
+            {
+                Vector3 a = transform.TransformPoint(path[i] + Area.offset);
+                Vector3 b = transform.TransformPoint(path[(i + 1) % path.Length] + Area.offset);
+
+                a.y += lift;
+                b.y += lift;
+
+                Gizmos.DrawLine(a, b);
+
+                // A vertical tick from footprint to surface - shows the lift itself,
+                // which is what you are tuning.
+                Gizmos.DrawLine(new Vector3(a.x, a.y - lift, a.z), a);
+            }
+        }
+    }// end of function >:D
+
+
+    // ADDED (walkable preview): read the factor from the live player instead of
+    // authoring it. WHY: AdjustPlayerScale changes the player's parent scale with
+    // depth, so a hardcoded elevationToWorld is only right at one depth and the
+    // preview would lie everywhere else. Reading it live means the outline tracks
+    // whatever the player's factor currently is.
+    //
+    // NOTE this is an EDITOR convenience only - it deliberately reaches for the
+    // player, which no runtime GroundArea code should ever do.
+    private float ElevationToWorld()
+    {
+        PlayerControl3 player = Object.FindFirstObjectByType<PlayerControl3>();
+        if (player == null || player.visualRoot == null || player.visualRoot.parent == null)
+            return 1f;
+
+        return player.visualRoot.parent.lossyScale.y;
+    }// end of function >:D
+
 
     // ADDED: one word for the surface pair, for gizmo colour and for debugging.
     // A property rather than a stored field so the two can never disagree (DRY).
