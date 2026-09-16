@@ -268,16 +268,28 @@ public class GroundArea : PolygonArea
     [Tooltip("Draw a second outline at this area's elevation - the surface the player will walk on.")]
     public bool showWalkablePreview = true;
 
-        // ADDED (walkable preview): world units per elevation unit. This is the player's
-    // parent scale - PlayerControl3 applies elevation to visualRoot.localPosition,
-    // which the parent transform then scales. There is no way to read it from here
-    // (the player is not this area's business), so it is authored.
+    // CHANGED (single knob pass): was a public per-area field, default 5.349.
+    // Now ONE const for the whole project, read by both consumers.
     //
-    // CAVEAT: AdjustPlayerScale changes that scale with depth, so this is only exact
-    // at one depth. If the preview drifts as you move the player in Y, that is the
-    // same coupling described below - not a bug in the gizmo.
-    [Tooltip("World units per elevation unit. Match the parentScaleY your player logs.")]
-    public float elevationToWorld = 5.349f;
+    // WHY: there were THREE copies of this number - this field (5.349),
+    // PlayerControl3.elevationToWorld (5.5), and a private ElevationToWorld()
+    // helper that nothing called. The first two DISAGREED, so the preview gizmo
+    // drew the walkable surface at 5.349 per elevation unit while ApplyHeights put
+    // the player at 5.5 per unit. Every platform was therefore off by 2.8%, and
+    // because both knobs multiply into the same result, tuning either one appeared
+    // to "fix" it - which is why the offset kept moving around.
+    //
+    // WHY A CONST: elevation is meant to be an abstract game unit, the same one
+    // maxStepUp, fallFloor and heightGateThreshold are already in. Only the
+    // conversion to world units is fixed, and it must be fixed for the gizmo and
+    // the player to be incapable of disagreeing. Per-platform height is set with
+    // 'elevation' and nothing else.
+    //
+    // The value is the player's parent scale - PlayerControl3 applies elevation to
+    // visualRoot.localPosition, which that parent then scales. To retune, change it
+    // HERE and every area follows.
+    // C# const - https://learn.microsoft.com/en-us/dotnet/csharp/language-reference/keywords/const
+    public const float ElevationToWorld = 5.349f;
 
     // ADDED (ramp pass): optional per-position elevation. Null on a flat area, which
     // is the common case - hence the cache rather than a GetComponent per query.
@@ -304,11 +316,10 @@ public class GroundArea : PolygonArea
     {
         if (!showWalkablePreview || Area == null || elevation == 0f) return;
 
-        // The player's height is applied in LOCAL units of visualRoot's parent and
-        // then scaled by that parent, so one elevation unit is worth
-        // 'elevationToWorld' world units. Set this to the parentScaleY your
-        // LogVisualHeight prints (5.349 in the current scene).
-        float lift = elevation * elevationToWorld;
+        // CHANGED (single knob pass): reads the shared const instead of a per-area
+        // field, so this outline and ApplyHeights use the SAME number by
+        // construction. They previously differed (5.349 here, 5.5 there).
+        float lift = elevation * ElevationToWorld;
 
         Gizmos.color = new Color(1f, 0.3f, 0.4f, 0.9f);   // the pink layer in the mockup
 
@@ -334,23 +345,14 @@ public class GroundArea : PolygonArea
     }// end of function >:D
 
 
-    // ADDED (walkable preview): read the factor from the live player instead of
-    // authoring it. WHY: AdjustPlayerScale changes the player's parent scale with
-    // depth, so a hardcoded elevationToWorld is only right at one depth and the
-    // preview would lie everywhere else. Reading it live means the outline tracks
-    // whatever the player's factor currently is.
-    //
-    // NOTE this is an EDITOR convenience only - it deliberately reaches for the
-    // player, which no runtime GroundArea code should ever do.
-    private float ElevationToWorld()
-    {
-        PlayerControl3 player = Object.FindFirstObjectByType<PlayerControl3>();
-        if (player == null || player.visualRoot == null || player.visualRoot.parent == null)
-            return 1f;
-
-        return player.visualRoot.parent.lossyScale.y;
-    }// end of function >:D
-
+    // REMOVED (single knob pass): private float ElevationToWorld() - read the
+    // factor live off the player via FindFirstObjectByType.
+    // WHY: nothing ever called it, so it was dead code. It also cannot coexist with
+    // the const above, which now owns that name. Its idea - track the player's
+    // CURRENT scale so the preview follows depth - was abandoned deliberately: a
+    // preview that moves with the player cannot tell you whether a platform is
+    // authored correctly, because the target moves as you look at it. A fixed
+    // conversion gives a fixed outline to author against.
 
     // ADDED: one word for the surface pair, for gizmo colour and for debugging.
     // A property rather than a stored field so the two can never disagree (DRY).

@@ -155,12 +155,14 @@ public class PlayerControl3 : MonoBehaviour
     [Tooltip("Must be a CHILD of this object so it follows the player horizontally.")]
     public GameObject playerShadow;
 
-     // ADDED (depth decoupling): world units per elevation unit. Fixed on purpose -
-    // this is what makes a platform's surface land in the same place regardless of
-    // how far back the player is standing. Set it to whatever parentScaleY reads at
-    // the depth your platforms were authored at, then tune platform elevations once.
-    [Tooltip("World units per elevation unit. Fixed - does not vary with depth.")]
-    public float elevationToWorld = 5.5f;
+    // REMOVED (single knob pass): public float elevationToWorld = 5.5f;
+    // Moved to GroundArea.ElevationToWorld, a const shared with the preview gizmo.
+    // WHY: this field held 5.5 while GroundArea's held 5.349, so the gizmo drew the
+    // walkable surface at one scale and ApplyHeights placed the player at another -
+    // a 2.8% disagreement on every platform. Two knobs that multiply into the same
+    // result can each appear to fix the other's error, which is what made the
+    // offset seem to move around. One const cannot disagree with itself.
+    // Read via GroundArea.ElevationToWorld.
 
     // REMOVED (ownership pass): public float maxStepUp = 1.5f;
     // Moved to GroundArea.maxStepUp, with GroundArea.DefaultMaxStepUp as the
@@ -465,7 +467,7 @@ public class PlayerControl3 : MonoBehaviour
 
             // CHANGED (depth decoupling): elevation is divided by currentScale so the
             // parent transform's multiplication cancels it, leaving a FIXED world
-            // lift of elevation * elevationToWorld at any depth.
+            // lift of elevation * GroundArea.ElevationToWorld at any depth.
             //
             // WHY: localPosition is scaled by the parent, and the parent's scale IS
             // currentScale (see AdjustPlayerScale). So the old line lifted the player
@@ -476,8 +478,8 @@ public class PlayerControl3 : MonoBehaviour
             // jumpYOffset is deliberately NOT divided: the arc SHOULD look bigger up
             // close, and JumpCoroutine already multiplies it by scale for that reason.
             float lift = (currentScale > 0.0001f)
-                ? elevation * elevationToWorld / currentScale
-                : elevation * elevationToWorld;
+                ? elevation * GroundArea.ElevationToWorld / currentScale
+                : elevation * GroundArea.ElevationToWorld;
     
         }
 

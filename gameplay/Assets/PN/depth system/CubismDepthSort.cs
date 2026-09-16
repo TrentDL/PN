@@ -27,6 +27,10 @@ public class CubismDepthSort : MonoBehaviour
         renderController = GetComponent<CubismRenderController>();
     }
 
+
+
+    // ATTENTION Artists do not touch anything below this line...
+    //Why: it will break the depth sorting of the player character
     void LateUpdate()
     {
         if (renderController == null)
