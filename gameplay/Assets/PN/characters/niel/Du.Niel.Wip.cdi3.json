@@ -1,0 +1,41 @@
+{
+	"Version": 3,
+	"Parameters": [
+		{
+			"Id": "Param",
+			"GroupId": "",
+			"Name": "TurnLeft"
+		},
+		{
+			"Id": "BackArmSwayParam",
+			"GroupId": "",
+			"Name": "BackArmSway"
+		},
+		{
+			"Id": "BodyBreathParam",
+			"GroupId": "",
+			"Name": "BodyBreath"
+		},
+		{
+			"Id": "HeadXParam",
+			"GroupId": "",
+			"Name": "HeadX"
+		},
+		{
+			"Id": "BackArmDrawOrderParam",
+			"GroupId": "",
+			"Name": "BackArmDrawOrder"
+		}
+	],
+	"ParameterGroups": [],
+	"Parts": [
+		{
+			"Id": "Part",
+			"Name": "head"
+		},
+		{
+			"Id": "Part2",
+			"Name": "BackArm"
+		}
+	]
+}
