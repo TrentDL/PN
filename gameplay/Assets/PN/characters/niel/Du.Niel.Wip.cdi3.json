@@ -2,9 +2,14 @@
 	"Version": 3,
 	"Parameters": [
 		{
-			"Id": "Param",
+			"Id": "headTurnLParam",
 			"GroupId": "",
-			"Name": "TurnLeft"
+			"Name": "headTurnL"
+		},
+		{
+			"Id": "headTurnRParam",
+			"GroupId": "",
+			"Name": "headTurnR"
 		},
 		{
 			"Id": "BackArmSwayParam",
@@ -32,6 +37,10 @@
 		{
 			"Id": "Part",
 			"Name": "head"
+		},
+		{
+			"Id": "Part3",
+			"Name": "FrontArm"
 		},
 		{
 			"Id": "Part2",
