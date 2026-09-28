@@ -6,6 +6,73 @@
  */
 
 
+ /* HEY TRENT HERE! this is a list of changes made to this licensed script
+ * ==========================================================================================
+ * CHANGE LOG — CubismRenderingInterceptController.cs
+ * ==========================================================================================
+ * Pass 1 (earlier edit)
+ * ------------------------------------------------------------------------------------------
+ * 1. Added field `public bool runInEditor = true;`
+ *    - Added an early return at the top of OnEnable():
+ *        if (!Application.isPlaying && !runInEditor) return;
+ *    - When checked (default), behaves exactly like the stock Live2D script, which already
+ *      runs in the editor through [ExecuteAlways].
+ *    - When unchecked, the component does nothing in edit mode.
+ *
+ * Pass 2 (sorting / edit-mode fixes)
+ * ------------------------------------------------------------------------------------------
+ * 2. Note added under `runInEditor`   [comment only, no code change]
+ *    - Reminder to leave it checked. Unchecking can leave a sprite hidden in the Scene view
+ *      because its Sprite Renderer stays switched off.
+ *
+ * 3. OnEnable() — material selection   [CHANGED]
+ *    - Old: read `_renderer.material`, then swapped to `_renderer.sharedMaterial` inside an
+ *      `#if UNITY_EDITOR` block when not playing.
+ *    - New: one line:
+ *        _material = Application.isPlaying ? _renderer.material : _renderer.sharedMaterial;
+ *    - Why: reading `.material` in edit mode made Unity create and save a copy of the
+ *      material ("Sprite-Unlit-Default (Instance)"). Choosing first avoids the copy.
+ *    - The `#if UNITY_EDITOR` block was removed; this one line replaces it.
+ *
+ * 4. OnEnable() — call to RefreshDrawOrder()   [ADDED]
+ *    - Placed right after AddInterceptors(this).
+ *    - Why: the manager draws interceptors in the order they registered, and Unity doesn't
+ *      guarantee which object's OnEnable runs first, so the stacking was random.
+ *
+ * 5. OnDisable() — re-enable the renderer   [ADDED]
+ *        if (_renderer) { _renderer.enabled = true; }
+ *    - Why: OnEnable turns the Sprite Renderer off so only Live2D draws it. Nothing turned
+ *      it back on, so disabling or removing this component left the sprite invisible.
+ *
+ * 6. OnValidate()   [NEW METHOD]
+ *    - Calls RefreshDrawOrder() when a value changes in the Inspector (only if the
+ *      component is active and enabled).
+ *    - Why: new Sorting Order values take effect right away without toggling the component.
+ *
+ * 7. RefreshDrawOrder()   [NEW METHOD, public]
+ *    - Moves this interceptor to its sorted spot in CubismRenderingInterceptorsManager's list.
+ *    - Order: lowest GroupSortingOrder first, then lowest SortingOrder first.
+ *    - Uses only the manager's existing ReorderIndices() method, so no other Live2D file
+ *      was changed.
+ *    - Public so gameplay code can call it after changing SortingOrder at runtime.
+ *
+ * 8. DrawsBefore(other)   [NEW METHOD, private]
+ *    - Returns true if this interceptor should draw before `other`.
+ *    - Compares GroupSortingOrder first, then SortingOrder.
+ *    - Ties return false, so equal values keep registration order. Give each object its
+ *      own SortingOrder when their relative order matters.
+ *
+ * Unchanged: TryDraw(), CheckSkipRendering(), the three intercept modes, camera draw
+ * tracking, LateUpdate/OnLateUpdate, the interface methods, and all original comments.
+ *
+ * Scene setup that goes with Pass 2 (Inspector, not code):
+ *    - Intercept controller added to BG (Pre Rendering, Sorting Order mode, Group 0).
+ *    - Sorting Order: BG = -300, Ground1 = -200, Circle = -100.
+ *    - Plain Sprite-Unlit-Default material reassigned on Ground1 and Circle.
+ * ==========================================================================================
+ */
+
+
 using System;
 using System.Collections.Generic;
 using Live2D.Cubism.Core;
@@ -138,6 +205,10 @@ namespace Live2D.Cubism.Rendering.URP.RenderingInterceptor
         }
 
         public bool runInEditor = true;
+        // [Pass 2 note] Leave this CHECKED. When checked, the component behaves exactly like the
+        //               stock Live2D version (which already runs in the editor via [ExecuteAlways]).
+        //               Unchecking it skips OnEnable in edit mode, which can leave a sprite hidden
+        //               in the Scene view because its Sprite Renderer stays switched off.
 
         /// <summary>
         /// Called by Unity when the component is enabled.
@@ -153,19 +224,26 @@ namespace Live2D.Cubism.Rendering.URP.RenderingInterceptor
                 _renderer = GetComponent<Renderer>();
 
                 _renderer.enabled = false;
-                _material = _renderer.material;
 
-#if UNITY_EDITOR
-                if (!Application.isPlaying)
-                {
-                    _material = _renderer.sharedMaterial;
-                }
-#endif
+                // [Pass 2 change] Pick the material once, based on edit mode vs play mode.
+                // WHY: The old code read `_renderer.material` first and only then swapped to
+                //      `sharedMaterial` in edit mode. Reading `.material` in edit mode makes Unity
+                //      create and assign a *copy* of the material ("Sprite-Unlit-Default (Instance)")
+                //      that gets saved into the scene. Choosing up front avoids creating that copy.
+                //      (This one line replaces the old `#if UNITY_EDITOR` block — same result, no leak.)
+                _material = Application.isPlaying ? _renderer.material : _renderer.sharedMaterial;
             }
 
             _cameraDrawStatus = Array.Empty<CameraDrawStatus>();
 
             CubismRenderingInterceptorsManager.GetInstance().AddInterceptors(this);
+
+            // [Pass 2 addition] Put this interceptor in its correct place in the shared list.
+            // WHY: The manager calls interceptors in the order they were registered, and Unity does
+            //      not guarantee which object's OnEnable runs first. When two objects (e.g. Ground1
+            //      and Circle) want to draw at the same moment, their order was effectively random.
+            //      Sorting on registration makes it depend only on the numbers you set.
+            RefreshDrawOrder();
 
             RenderPipelineManager.beginContextRendering += OnBeginContextRendering;
         } // end of function
@@ -186,6 +264,78 @@ namespace Live2D.Cubism.Rendering.URP.RenderingInterceptor
             CubismRenderingInterceptorsManager.GetInstance().RemoveInterceptors(this);
 
             RenderPipelineManager.beginContextRendering -= OnBeginContextRendering;
+
+            // [Pass 2 addition] Hand the sprite back to Unity's normal renderer.
+            // WHY: OnEnable switches the Sprite Renderer off so it is only drawn through Live2D.
+            //      Nothing switched it back on, so disabling or removing this component left the
+            //      sprite permanently invisible (and that "off" state could be saved in the scene).
+            if (_renderer)
+            {
+                _renderer.enabled = true;
+            }
+        }
+
+        /// <summary>
+        /// [Pass 2 addition] Called by Unity when a value is changed in the Inspector.
+        /// WHY: Lets you type a new Sorting Order / Group Sorting Order and see the new
+        ///      stacking immediately, instead of having to toggle the component off and on.
+        /// </summary>
+        private void OnValidate()
+        {
+            if (isActiveAndEnabled)
+            {
+                RefreshDrawOrder();
+            }
+        }
+
+        /// <summary>
+        /// [Pass 2 addition] Moves this interceptor to its sorted position in the manager's list,
+        /// ordered by GroupSortingOrder, then SortingOrder (lowest first = drawn first).
+        /// Public so gameplay code can call it after changing SortingOrder at runtime.
+        /// WHY: Single place that owns "where do I sit in the queue" — OnEnable and OnValidate
+        ///      both reuse it (DRY). Only uses the manager's existing ReorderIndices API,
+        ///      so no Live2D SDK file other than this one needs to change.
+        /// </summary>
+        public void RefreshDrawOrder()
+        {
+            var manager = CubismRenderingInterceptorsManager.GetInstance();
+            var targetIndex = 0;
+
+            foreach (var interceptor in manager.Interceptors)
+            {
+                // Skip myself — I'm the one being moved.
+                if (ReferenceEquals(interceptor, this))
+                {
+                    continue;
+                }
+
+                // Stop at the first interceptor that should draw after me; I go right before it.
+                // Non-controller interceptors (other ICubismRenderingInterceptor types) keep their place.
+                if (interceptor is CubismRenderingInterceptController other && DrawsBefore(other))
+                {
+                    break;
+                }
+
+                targetIndex++;
+            }
+
+            // Silently does nothing if this interceptor isn't registered.
+            manager.ReorderIndices(this, targetIndex);
+        }
+
+        /// <summary>
+        /// [Pass 2 addition] True if this interceptor should be drawn before <paramref name="other"/>.
+        /// Ties return false, so equal values keep registration order — give each object its own
+        /// SortingOrder if their relative order matters.
+        /// </summary>
+        private bool DrawsBefore(CubismRenderingInterceptController other)
+        {
+            if (GroupSortingOrder != other.GroupSortingOrder)
+            {
+                return GroupSortingOrder < other.GroupSortingOrder;
+            }
+
+            return SortingOrder < other.SortingOrder;
         }
 
         /// <summary>

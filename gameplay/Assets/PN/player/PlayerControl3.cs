@@ -76,6 +76,18 @@
 //     an edge can refuse to open its canJumpOver/canFallThrough permissions until
 //     the player's height clears a threshold set on that EdgeZone.
 //
+// CHANGED (facing layer pass):
+//   * REMOVED: the frame-scrub of the niel_flip clip (flipStateName, leftFrame,
+//     rightFrame, clipLengthFrames, flipDuration, flipT, flipTarget, flipStateHash,
+//     ApplyFacing, and animator.speed = 0 in Start).
+//     WHY: animator.speed = 0 freezes the WHOLE Animator - every layer - so an idle
+//     could never play at the same time as the facing pose.
+//   * ADDED: FacingRightHash + a two-line UpdateFacing. The script now only REPORTS
+//     which way the player faces; the Animator's "facing" layer decides WHAT that
+//     looks like, by keyframing the art meshes' GameObject.IsActive.
+//     Result: art changes (new hands, a head-turn clip, a back view) happen in the
+//     Animator and clips, not in this script.
+//
 // EARLIER CHANGES - all of it about the shadow:
 //   * ADDED: shadowStartLocalPos - the shadow's authored local position, so the
 //     elevation offset is added to it instead of overwriting it.
@@ -95,6 +107,12 @@ public class PlayerControl3 : MonoBehaviour
 {
     static float moveSpeed = 5f, moveAccuracy = 0.15f;
 
+    // ADDED (facing layer pass): the Animator Bool both layers read. Hashed ONCE for
+    // the whole game (static readonly) instead of every call - same reason the old
+    // flipStateHash was cached. The string MUST match the parameter name in the
+    // Animator window exactly, including capitals.
+    static readonly int FacingRightHash = Animator.StringToHash("FacingRight");
+
     #region movement fields/properties
 
     [Header("References")]
@@ -104,20 +122,24 @@ public class PlayerControl3 : MonoBehaviour
     [Header("Facing")]
     [Tooltip("Animator holding the flip state.")]
     public Animator animator;
-    [Tooltip("Name of the state playing the flip clip.")]
-    public string flipStateName = "flip";
-    [Tooltip("Frame of the flip clip that shows the left-facing pose.")]
-    public int leftFrame = 0;
-    [Tooltip("Frame of the flip clip that shows the right-facing pose.")]
-    public int rightFrame = 13;
-    [Tooltip("Total length of the flip clip in frames. Used to convert a frame to normalized time.")]
-    public int clipLengthFrames = 13;
-    [Tooltip("Seconds for a full turn from one side to the other.")]
-    public float flipDuration = 0.15f;
 
-    private int flipStateHash;               // cached - Play(hash) avoids a string lookup per seek
-    private float flipT = 0f;                // where the turn actually is:  0 = left, 1 = right
-    private float flipTarget = 0f;           // where the input wants it to be
+    // REMOVED (facing layer pass): the flip-clip scrub fields. Kept as comments so
+    // the old values are on record - Unity drops serialized data for a field that
+    // no longer exists, same as the maxStepUp note below.
+    // [Tooltip("Name of the state playing the flip clip.")]
+    // public string flipStateName = "flip";
+    // [Tooltip("Frame of the flip clip that shows the left-facing pose.")]
+    // public int leftFrame = 0;
+    // [Tooltip("Frame of the flip clip that shows the right-facing pose.")]
+    // public int rightFrame = 13;
+    // [Tooltip("Total length of the flip clip in frames. Used to convert a frame to normalized time.")]
+    // public int clipLengthFrames = 13;
+    // [Tooltip("Seconds for a full turn from one side to the other.")]
+    // public float flipDuration = 0.15f;
+    //
+    // private int flipStateHash;               // cached - Play(hash) avoids a string lookup per seek
+    // private float flipT = 0f;                // where the turn actually is:  0 = left, 1 = right
+    // private float flipTarget = 0f;           // where the input wants it to be
 
     private Rigidbody2D rb;              // MAY BE NULL - always guard
     private Vector2 moveInput;
@@ -256,12 +278,16 @@ public class PlayerControl3 : MonoBehaviour
         {
             Debug.LogError("PlayerControl3: animator is not assigned. Facing will not change.", this);
         }
-        else
-        {
-            flipStateHash = Animator.StringToHash(flipStateName);
-            animator.speed = 0f;   // the clip never plays itself - this script owns its time
-            ApplyFacing();         // land on the left pose before the first input
-        }
+        // REMOVED (facing layer pass): the else-branch below. The Animator now runs at
+        // normal speed so every layer plays, and the facing layer's DEFAULT state
+        // (the orange one in the Animator window) is the starting pose - no manual
+        // first seek needed.
+        // else
+        // {
+        //     flipStateHash = Animator.StringToHash(flipStateName);
+        //     animator.speed = 0f;   // the clip never plays itself - this script owns its time
+        //     ApplyFacing();         // land on the left pose before the first input
+        // }
 
         if (playerShadow != null)
         {
@@ -567,32 +593,28 @@ public class PlayerControl3 : MonoBehaviour
     // 6. SINGLE CUBISM PARAMETER - wrote Left_right_Opacity to -10 / +10 directly.
     // 7. FRAME SNAP - same clip as now, but Play() jumped straight to frame 0 or
     //    13 with no in-between. Replaced to get an actual turn animation.
+    // 8. FRAME SCRUB (added facing layer pass) - animator.speed = 0, then Play()
+    //    seeked niel_flip to a frame between leftFrame and rightFrame over
+    //    flipDuration. Replaced because speed = 0 froze EVERY Animator layer, so
+    //    the idle could not play at the same time. Differs from #2: the transition
+    //    now lives on its OWN layer whose clips key only GameObject.IsActive, so
+    //    there are no unrelated parameters for a cross-fade to drag along.
     #endregion
 
 
+    // CHANGED (facing layer pass): was a timed seek through the flip clip. Now it only
+    // tells the Animator which way we face; the "facing" layer's clips decide which
+    // art meshes are active. No input (x == 0) leaves the last direction in place -
+    // that is what keeps the player facing left after letting go of A.
     private void UpdateFacing()
     {
-        if (moveInput.x != 0)
-            flipTarget = moveInput.x > 0 ? 1f : 0f;
-
-        if (flipT == flipTarget) return;
-
-        flipT = (flipDuration > 0f)
-            ? Mathf.MoveTowards(flipT, flipTarget, Time.deltaTime / flipDuration)
-            : flipTarget;
-
-        ApplyFacing();
+        if (animator == null || moveInput.x == 0f) return;
+        animator.SetBool(FacingRightHash, moveInput.x > 0f);
     }
 
 
-    private void ApplyFacing()
-    {
-        if (animator == null || clipLengthFrames <= 0) return;
-
-        float frame = Mathf.Lerp(leftFrame, rightFrame, flipT);
-        animator.Play(flipStateHash, 0, frame / clipLengthFrames);
-        animator.Update(0f);
-    }
+    // REMOVED (facing layer pass): ApplyFacing(). It seeked the flip clip by frame;
+    // see #8 in the region above.
 
 
     private void DetectDoubleTap()
