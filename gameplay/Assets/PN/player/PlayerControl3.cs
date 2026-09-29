@@ -255,6 +255,9 @@ public class PlayerControl3 : MonoBehaviour
     [Tooltip("Log visualRoot's height at takeoff and at every landing.")]
     public bool logVisualHeight = false;
 
+    [Tooltip("Log why sprint turned on or off, per key.")]
+    public bool logSprint = false;
+
 
     #endregion
 
@@ -313,6 +316,9 @@ public class PlayerControl3 : MonoBehaviour
 
         DetectDoubleTap();
         ApplySprintSpeed();
+
+        
+
         UpdateFacing();
         AdjustPlayerScale();
         ApplyScaleToSpeed();
@@ -324,7 +330,7 @@ public class PlayerControl3 : MonoBehaviour
         }
 
         if (rb == null) ApplyMovement(Time.deltaTime);
-    }
+    }//end of function >:D
 
 
     void FixedUpdate()
@@ -548,6 +554,21 @@ public class PlayerControl3 : MonoBehaviour
     }// end of function >:D
 
 
+    // ADDED (sprint diagnosis): prints the sprint state at one moment. Kept separate
+    // from DetectDoubleTap so that function keeps its single job - this one only
+    // reads and prints. 'gap' is the time since the previous press of the same key
+    // (pass 0 when there is no press to measure).
+    private void LogSprint(string moment, float gap)
+    {
+        if (!logSprint) return;
+
+        Debug.Log(
+            $"[sprint {moment}] gap={gap:F3}s window={doubleTapWindow:F3}s " +
+            $"L={isSprintingLeft} R={isSprintingRight} moveX={moveInput.x} " +
+            $"timeScale={Time.timeScale:F2} frame={Time.frameCount}", this);
+    }// end of function >:D
+
+
 
     private void SetShadowVisible(bool visible)
     {
@@ -621,18 +642,31 @@ public class PlayerControl3 : MonoBehaviour
     {
         if (Input.GetKeyDown(sprintKeyLeft))
         {
-            if (Time.time - lastTapTimeLeft < doubleTapWindow) isSprintingLeft = true;
+            // CHANGED (sprint diagnosis): the subtraction is stored in 'gap' so the
+            // if-test and the log read the SAME number. Behaviour is identical.
+            float gap = Time.time - lastTapTimeLeft;
+            if (gap < doubleTapWindow) isSprintingLeft = true;
             lastTapTimeLeft = Time.time;
+            LogSprint("left down", gap);   // ADDED (sprint diagnosis)
         }
 
         if (Input.GetKeyDown(sprintKeyRight))
         {
-            if (Time.time - lastTapTimeRight < doubleTapWindow) isSprintingRight = true;
+            // CHANGED (sprint diagnosis): same as the left branch.
+            float gap = Time.time - lastTapTimeRight;
+            if (gap < doubleTapWindow) isSprintingRight = true;
             lastTapTimeRight = Time.time;
+            LogSprint("right down", gap);  // ADDED (sprint diagnosis)
         }
 
-        if (Input.GetKeyUp(sprintKeyLeft)) isSprintingLeft = false;
-        if (Input.GetKeyUp(sprintKeyRight)) isSprintingRight = false;
+        if (Input.GetKeyUp(sprintKeyLeft))  { isSprintingLeft = false;  LogSprint("left up", 0f); }   // CHANGED: log added
+        if (Input.GetKeyUp(sprintKeyRight)) { isSprintingRight = false; LogSprint("right up", 0f); }  // CHANGED: log added
+
+        // ADDED (sprint diagnosis): the stuck-flag detector. A flag that is on while
+        // its key is NOT physically held means the "up" above was never seen.
+        // This line is the direct test for suspect 1.
+        if (isSprintingLeft && !Input.GetKey(sprintKeyLeft))   LogSprint("STUCK left", 0f);
+        if (isSprintingRight && !Input.GetKey(sprintKeyRight)) LogSprint("STUCK right", 0f);
     }
 
 
