@@ -123,25 +123,8 @@ public class PlayerControl3 : MonoBehaviour
     [Tooltip("Animator holding the flip state.")]
     public Animator animator;
 
-    // REMOVED (facing layer pass): the flip-clip scrub fields. Kept as comments so
-    // the old values are on record - Unity drops serialized data for a field that
-    // no longer exists, same as the maxStepUp note below.
-    // [Tooltip("Name of the state playing the flip clip.")]
-    // public string flipStateName = "flip";
-    // [Tooltip("Frame of the flip clip that shows the left-facing pose.")]
-    // public int leftFrame = 0;
-    // [Tooltip("Frame of the flip clip that shows the right-facing pose.")]
-    // public int rightFrame = 13;
-    // [Tooltip("Total length of the flip clip in frames. Used to convert a frame to normalized time.")]
-    // public int clipLengthFrames = 13;
-    // [Tooltip("Seconds for a full turn from one side to the other.")]
-    // public float flipDuration = 0.15f;
-    //
-    // private int flipStateHash;               // cached - Play(hash) avoids a string lookup per seek
-    // private float flipT = 0f;                // where the turn actually is:  0 = left, 1 = right
-    // private float flipTarget = 0f;           // where the input wants it to be
-
     private Rigidbody2D rb;              // MAY BE NULL - always guard
+    private Dash dash;  
     private Vector2 moveInput;
     private Vector2 moveVelocity;
 
@@ -177,22 +160,6 @@ public class PlayerControl3 : MonoBehaviour
     [Tooltip("Must be a CHILD of this object so it follows the player horizontally.")]
     public GameObject playerShadow;
 
-    // REMOVED (single knob pass): public float elevationToWorld = 5.5f;
-    // Moved to GroundArea.ElevationToWorld, a const shared with the preview gizmo.
-    // WHY: this field held 5.5 while GroundArea's held 5.349, so the gizmo drew the
-    // walkable surface at one scale and ApplyHeights placed the player at another -
-    // a 2.8% disagreement on every platform. Two knobs that multiply into the same
-    // result can each appear to fix the other's error, which is what made the
-    // offset seem to move around. One const cannot disagree with itself.
-    // Read via GroundArea.ElevationToWorld.
-
-    // REMOVED (ownership pass): public float maxStepUp = 1.5f;
-    // Moved to GroundArea.maxStepUp, with GroundArea.DefaultMaxStepUp as the
-    // no-area fallback. Read via GroundArea.MaxStepUpFor(currentArea).
-    // NOTE: the inspector value you had set on the player is NOT carried over -
-    // Unity drops serialized data for a field that no longer exists. Re-enter it on
-    // the GroundArea components that need something other than the default.
-    // Unity - Script Serialization: https://docs.unity3d.com/Manual/script-Serialization.html
 
     [Tooltip("Elevation units per second squared. Higher = heavier.")]
     public float fallAcceleration = 20f;
@@ -220,6 +187,8 @@ public class PlayerControl3 : MonoBehaviour
     private bool isJumping = false;
 
     private bool isFalling = false;
+
+    public bool IsAirborne => isJumping || isFalling;
 
     private Vector3 shadowStartScale;
     private Vector3 shadowStartLocalPos;
@@ -265,6 +234,8 @@ public class PlayerControl3 : MonoBehaviour
     void Start()
     {
         rb = GetComponent<Rigidbody2D>();   // fine if null
+
+        dash = GetComponent<Dash>();         // fine if null - no Dash component, no dash
 
         if (visualRoot == null)
         {
@@ -317,7 +288,7 @@ public class PlayerControl3 : MonoBehaviour
         DetectDoubleTap();
         ApplySprintSpeed();
 
-        
+        if (dash != null && dash.IsDashing) moveVelocity = dash.Velocity;
 
         UpdateFacing();
         AdjustPlayerScale();
@@ -347,7 +318,8 @@ public class PlayerControl3 : MonoBehaviour
 
     private void JumpPhysics()
     {
-        bool airborne = isJumping || isFalling;
+        bool airborne = IsAirborne;   // CHANGED (dash pass): was isJumping || isFalling
+        
 
         if (!airborne)
         {
