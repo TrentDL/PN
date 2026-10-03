@@ -10,9 +10,16 @@
 // 1509 in this project). One shared sortOrderInside cannot be correct for both, so
 // a single component would need two target fields and a type test in every loop.
 // Two components, one number each, no branching - each script has one reason to change.
+// Pass 3 (Live2D removal): now drives a Unity SortingGroup (whole character) instead of
+// the Cubism interceptor. AnimationZone now drives individual Renderers.
+// Pass 5 (SpriteRenderer target): now drives Renderer.sortingOrder (the "Order in Layer"
+// box on a Sprite Renderer) instead of a SortingGroup.
 
 using UnityEngine;
-using Live2D.Cubism.Rendering.URP.RenderingInterceptor;   // CubismRenderingInterceptController
+// Pass 3 (Live2D removal): replaced the Cubism interceptor namespace with Unity's own.
+// Why: SortingGroup lives in UnityEngine.Rendering. It's built into Unity, so no package is needed.
+// Pass 5 (SpriteRenderer target): removed "using UnityEngine.Rendering;" - Renderer lives in
+// UnityEngine, so that extra line is no longer needed.
 
 [RequireComponent(typeof(PolygonCollider2D))]
 public class InterceptZone : MonoBehaviour
@@ -21,10 +28,15 @@ public class InterceptZone : MonoBehaviour
     [Tooltip("Whose position is tested. Usually the player root.")]
     public Transform watched;
 
-    [Tooltip("Objects with a Cubism Rendering Intercept Controller. Dropping in the GameObject is fine - the component is found on it or its children.")]
+    [Tooltip("Objects with a Sprite Renderer (any Renderer). Dropping in the GameObject is fine - the component is found on it or its children.")]
+    // Pass 3 (Live2D removal): tooltip text updated to name SortingGroup.
+    // Pass 5 (SpriteRenderer target): tooltip text updated to name Sprite Renderer. Field name kept
+    // as "interceptors" so anything already dragged into this slot in the Inspector is not lost.
     public Component[] interceptors;
 
-    [Tooltip("SortingOrder to apply while inside. Same scale as the value authored on the interceptor, NOT the small numbers used by art meshes.")]
+    [Tooltip("Order in Layer to apply while inside. Same scale as the Sprite Renderer's Order in Layer.")]
+    // Pass 3 (Live2D removal): tooltip text updated. The old 1509 was a Live2D-authored value.
+    // Pass 5 (SpriteRenderer target): tooltip text updated. Set the real value in the Inspector.
     public int sortOrderInside = 1509;
 
     [Header("Behaviour")]
@@ -42,7 +54,10 @@ public class InterceptZone : MonoBehaviour
     private float exitTime = -1f;                 // when they left; negative means inside
 
     // ADDED: resolved once at startup so the per-frame loops never do a lookup or null check.
-    private CubismRenderingInterceptController[] resolved;
+    private Renderer[] resolved;
+    // Pass 3 (Live2D removal): CubismRenderingInterceptController[] -> SortingGroup[].
+    // Pass 5 (SpriteRenderer target): SortingGroup[] -> Renderer[]. Renderer is the parent type of
+    // SpriteRenderer, so a Sprite Renderer fits (polymorphism).
     private int[] originalOrders;                 // whatever was authored, captured not hardcoded
 
     void Awake()
@@ -51,16 +66,19 @@ public class InterceptZone : MonoBehaviour
 
         // ADDED: two-pass fill into plain arrays. Bad entries are dropped here rather than
         // null-checked every frame in SetOrder. Arrays only - no extra namespace needed.
-        CubismRenderingInterceptController[] temp =
-            new CubismRenderingInterceptController[interceptors.Length];
+        Renderer[] temp = new Renderer[interceptors.Length];
+        // Pass 3 (Live2D removal): type swap only; the logic is unchanged.
+        // Pass 5 (SpriteRenderer target): type swap only; the logic is unchanged.
         int count = 0;
 
         for (int i = 0; i < interceptors.Length; i++)
         {
-            CubismRenderingInterceptController c = Resolve(interceptors[i]);
+            Renderer c = Resolve(interceptors[i]);
             if (c == null)
             {
-                Debug.LogWarning(name + ": interceptors[" + i + "] has no CubismRenderingInterceptController - skipped.", this);
+                Debug.LogWarning(name + ": interceptors[" + i + "] has no Renderer - skipped.", this);
+                // Pass 3 (Live2D removal): warning text names SortingGroup.
+                // Pass 5 (SpriteRenderer target): warning text names Renderer.
                 continue;
             }
             temp[count] = c;
@@ -74,27 +92,30 @@ public class InterceptZone : MonoBehaviour
         }
         else
         {
-            resolved = new CubismRenderingInterceptController[count];
+            resolved = new Renderer[count];
             for (int i = 0; i < count; i++)
                 resolved[i] = temp[i];
         }
 
         originalOrders = new int[resolved.Length];
         for (int i = 0; i < resolved.Length; i++)
-            originalOrders[i] = resolved[i].SortingOrder;
+            originalOrders[i] = resolved[i].sortingOrder;
+        // Pass 3 (Live2D removal): SortingOrder -> sortingOrder (Unity's name for it).
     }// end of function >:D
 
     // ADDED: accepts the component itself, or finds it on that object or a child. Your
     // Inspector showed a Transform in the slot - dragging a GameObject assigns its Transform,
     // so without this the list would silently resolve to nothing.
-    private static CubismRenderingInterceptController Resolve(Component c)
+    private static Renderer Resolve(Component c)
+    // Pass 3 (Live2D removal): return type and lookups now use SortingGroup.
+    // Pass 5 (SpriteRenderer target): return type and lookups now use Renderer.
     {
         if (c == null) return null;
 
-        CubismRenderingInterceptController direct = c as CubismRenderingInterceptController;
+        Renderer direct = c as Renderer;
         if (direct != null) return direct;
 
-        return c.GetComponentInChildren<CubismRenderingInterceptController>();
+        return c.GetComponentInChildren<Renderer>();
     }// end of function >:D
 
     void Update()
@@ -131,13 +152,15 @@ public class InterceptZone : MonoBehaviour
     private void SetOrder(int order)
     {
         for (int i = 0; i < resolved.Length; i++)
-            resolved[i].SortingOrder = order;
+            resolved[i].sortingOrder = order;
+        // Pass 3 (Live2D removal): SortingOrder -> sortingOrder.
     }// end of function >:D
 
     private void Restore()
     {
         for (int i = 0; i < resolved.Length; i++)
-            resolved[i].SortingOrder = originalOrders[i];
+            resolved[i].sortingOrder = originalOrders[i];
+        // Pass 3 (Live2D removal): SortingOrder -> sortingOrder.
     }// end of function >:D
 
     void OnDrawGizmos()

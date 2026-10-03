@@ -11,9 +11,8 @@
 // silently never fire on a setup without one. A point test always works.
 
 using UnityEngine;
-using Live2D.Cubism.Rendering;
-using Live2D.Cubism.Core;        // CubismModel, CubismDrawable, CubismParameter
-using Live2D.Cubism.Framework;   // CubismUpdateController and friends
+// Pass 3 (Live2D removal): removed the three Live2D using lines
+// (Rendering, Core, Framework). Only Rendering was actually used; the SDK is gone.
 
 
 [RequireComponent(typeof(PolygonCollider2D))]
@@ -48,7 +47,10 @@ public class AnimationZone : MonoBehaviour
     private bool wasInside = false;   // edge detection - fire on ENTRY, not every frame
 
     // In AnimationZone, replacing Fire()'s SetTrigger call
-    public CubismRenderer[] drawables;   // drag the specific art meshes in
+    public Renderer[] drawables;   // drag the specific art meshes in
+    // Pass 3 (Live2D removal): type changed from CubismRenderer[] to Renderer[].
+    // Why: Renderer is Unity's base "anything that draws" type, so SpriteRenderers fit here.
+    // NOTE: your old drag-ins were Cubism parts, so this array must be re-filled in the Inspector.
     public int sortOrderInside = 10;
 
 
@@ -63,7 +65,8 @@ public class AnimationZone : MonoBehaviour
 
         originalOrders = new int[drawables.Length];
         for (int i = 0; i < drawables.Length; i++)
-        originalOrders[i] = drawables[i].LocalSortingOrder;
+        originalOrders[i] = drawables[i].sortingOrder;
+        // Pass 3 (Live2D removal): LocalSortingOrder -> sortingOrder (Unity's name for it).
     }// end of function >:D
 
     void Update()
@@ -95,20 +98,23 @@ public class AnimationZone : MonoBehaviour
      private void SetOrder(int order)
     {
         for (int i = 0; i < drawables.Length; i++)
-            drawables[i].LocalSortingOrder = order;
+            drawables[i].sortingOrder = order;
+        // Pass 3 (Live2D removal): LocalSortingOrder -> sortingOrder.
     }// end of function >:D
 
     private void Restore()
     {
         for (int i = 0; i < drawables.Length; i++)
-            drawables[i].LocalSortingOrder = originalOrders[i];
+            drawables[i].sortingOrder = originalOrders[i];
+        // Pass 3 (Live2D removal): LocalSortingOrder -> sortingOrder.
     }// end of function >:D
 
 
     private void Fire()
     {
         for (int i = 0; i < drawables.Length; i++)
-            drawables[i].LocalSortingOrder = sortOrderInside;
+            drawables[i].sortingOrder = sortOrderInside;
+        // Pass 3 (Live2D removal): LocalSortingOrder -> sortingOrder.
     }// end of function >:D
 
     void OnDrawGizmos()
