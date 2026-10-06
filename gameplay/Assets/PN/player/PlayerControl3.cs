@@ -133,6 +133,16 @@
 //     every comparison - it is added to elevation at the apex). WHY: the arc lives
 //     on visualRoot and the landed height lives on the root. If their units differ,
 //     the player pops at the apex when one hands off to the other.
+//
+// ADDED (root lift toggle): liftRootWithElevation, a debug switch for the pass above.
+//   ON  = the root lift pass (playerAlt rides up and down with elevation).
+//   OFF = the old look: root stays on the floor, visualRoot and shadow carry the
+//         height using the exact pre-pass formulas.
+//   * The toggle touches DRAWING only - PlaceRoot and ApplyHeights. Every rules
+//     lookup reads groundPosition in both modes. WHY that is safe: with the lift off
+//     the root sits ON groundPosition, so it is the same number the old code read
+//     from transform.position. One code path for rules, no duplicated logic.
+//   * Read every frame, so it can be flipped mid-Play to compare side by side.
 
 using System.Collections;
 using UnityEngine;
@@ -236,6 +246,12 @@ public class PlayerControl3 : MonoBehaviour
 
     [Header("Boundary Settings")]
     public bool enableBoundaryChecking = true;
+
+    // ADDED (root lift toggle): debug switch for the root lift pass. See header.
+    [Header("Root Lift")]
+    [Tooltip("ON: the whole player root (playerAlt) moves up/down with elevation. " +
+             "OFF: old behaviour - only VisualsRoot and the shadow are offset. Can be flipped during Play.")]
+    public bool liftRootWithElevation = true;
 
     private GroundArea currentArea;
 
@@ -534,7 +550,10 @@ public class PlayerControl3 : MonoBehaviour
     // shadow and UI stay planted while the body arcs, as before.
     private void PlaceRoot()
     {
-        Vector2 drawn = groundPosition + Vector2.up * (elevation * GroundArea.ElevationToWorld);
+        // CHANGED (root lift toggle): lift is 0 when the toggle is off, so the root
+        // sits on the footprint exactly like the old code.
+        float lift = liftRootWithElevation ? elevation * GroundArea.ElevationToWorld : 0f;
+        Vector2 drawn = groundPosition + Vector2.up * lift;
 
         if (rb != null)
             rb.MovePosition(drawn);
@@ -563,7 +582,11 @@ public class PlayerControl3 : MonoBehaviour
             // carries elevation, so adding it here would lift the body twice. Only
             // the jump arc remains, converted through ToLocalLift so it is in the
             // same units the root uses - that is what stops the pop at the apex.
-            lp.y = visualStartLocalPos.y + ToLocalLift(jumpYOffset);
+            // CHANGED (root lift toggle): OFF restores the pre-pass line exactly,
+            // so the body carries elevation itself again.
+            lp.y = visualStartLocalPos.y + (liftRootWithElevation
+                ? ToLocalLift(jumpYOffset)
+                : jumpYOffset + elevation);
             visualRoot.localPosition = lp;
 
             // CHANGED (depth decoupling): elevation is divided by currentScale so the
@@ -595,7 +618,11 @@ public class PlayerControl3 : MonoBehaviour
         // and the player's own height. Standing: 0, sits at the feet. Over a pit or
         // jumping off a ledge: negative, stays down on the lower ground.
         Vector3 sp = shadowStartLocalPos;
-        sp.y = shadowStartLocalPos.y + ToLocalLift(groundHeight - elevation);
+        // CHANGED (root lift toggle): OFF restores the pre-pass line exactly - the
+        // root is on the floor, so the shadow is lifted by the ground height itself.
+        sp.y = shadowStartLocalPos.y + (liftRootWithElevation
+            ? ToLocalLift(groundHeight - elevation)
+            : groundHeight);
         playerShadow.transform.localPosition = sp;
 
         float heightAboveGround = jumpYOffset + (elevation - groundHeight);
@@ -616,6 +643,7 @@ public class PlayerControl3 : MonoBehaviour
         float localY   = visualRoot.localPosition.y;
         float applied  = localY - baseY;              // what is actually on the transform
         float intended = ToLocalLift(jumpYOffset);     // what ApplyHeights composes - CHANGED (root lift pass): elevation lives on the root now
+        if (!liftRootWithElevation) intended = jumpYOffset + elevation;   // ADDED (root lift toggle): match ApplyHeights' OFF branch
         float parentScaleY = (visualRoot.parent != null) ? visualRoot.parent.lossyScale.y : 1f;
 
         Debug.Log(
