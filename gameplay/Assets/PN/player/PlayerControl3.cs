@@ -98,6 +98,41 @@
 //     arcs above it. (To glue it to the feet, see the note in ApplyHeights.)
 //   * RENAMED: ApplyVisualHeight() -> ApplyHeights(). It owns the shadow's position
 //     and scale too, so there is one place the height values reach the visuals.
+//
+// CHANGED (corner scale pass) - DIAGNOSTIC ONLY, no behaviour changed:
+//   SYMPTOM: perspective scaling resumes in one corner of platform1 even though
+//   freezeScaleWhileOn is set. The freeze is a latch that only SetArea flips, so
+//   the question is "does the code think we changed area at that corner?"
+//   * COMMENTED OUT (not deleted): both TEMP pit diagnosis blocks in ApplyMovement.
+//     WHY: they log every frame, which buried the one line this pass needs and
+//     costs performance in play mode. Re-enable if the pit regresses.
+//   * ADDED: logAreaChanges toggle (TEMP Debug header) + LogAreaChange helper.
+//     WHY: prints one line per SetArea call - area left, area entered, and whether
+//     the freeze is on afterwards. Separate helper so SetArea keeps its single job,
+//     same pattern as LogSprint / LogVisualHeight.
+//   * ADDED: two lines in SetArea - remember the previous area, then log.
+//   Remove all three once the corner is fixed.
+//
+// CHANGED (root lift pass): elevation now moves the ROOT (playerAlt), not just
+//   visualRoot and the shadow. Every child - VisualsRoot, GroundPoint, Circle,
+//   ItemHolder, PlayerUI - rides up onto a platform and down into a pit together.
+//   * ADDED: groundPosition - the player's FOOTPRINT on the floor. The root used to
+//     BE the footprint; now the root is lifted, so the footprint needs its own
+//     variable. Every rules question (which area am I on, what is my depth scale,
+//     where is safe ground) reads groundPosition. Only the drawn position is lifted.
+//     WHY: world Y is depth (see TileStep's DEPTH note). If the lifted root were
+//     asked "where am I", a platform would read as standing further back in the
+//     room - wrong area, wrong scale, wrong sorting.
+//   * ADDED: GroundPosition (read-only property) for other scripts that need depth.
+//   * ADDED: PlaceRoot() - the ONE place the root's world position is written.
+//   * ADDED: ToLocalLift() - converts elevation units to visualRoot/shadow local
+//     units. Shared by both, so the conversion is written once (DRY).
+//   * CHANGED: ApplyHeights - visualRoot carries ONLY the jump arc now; the shadow
+//     is placed RELATIVE to the lifted root. Removed the unused 'lift' variable.
+//   * CHANGED: jumpYOffset is now treated as elevation units (it already was in
+//     every comparison - it is added to elevation at the apex). WHY: the arc lives
+//     on visualRoot and the landed height lives on the root. If their units differ,
+//     the player pops at the apex when one hands off to the other.
 
 using System.Collections;
 using UnityEngine;
@@ -116,7 +151,8 @@ public class PlayerControl3 : MonoBehaviour
     #region movement fields/properties
 
     [Header("References")]
-    [Tooltip("Live2D model root. Gets lifted during jumps and by ground elevation.")]
+    [Tooltip("Visual root (sprite art). Gets lifted during jumps and by ground elevation.")]
+    // Pass 4 (Live2D removal): tooltip text was "Live2D model root..." - the visuals are sprites now.
     public Transform visualRoot;
 
     [Header("Facing")]
@@ -152,7 +188,9 @@ public class PlayerControl3 : MonoBehaviour
     private bool isSprintingRight = false;
 
     [Header("Jump Settings")]
-    [Tooltip("Maximum height the visual rises, in local units of visualRoot's parent. " +
+    // CHANGED (root lift pass): tooltip said "in local units of visualRoot's parent".
+    // The arc is now in elevation units, the same as GroundArea.elevation.
+    [Tooltip("Maximum height the visual rises, in elevation units (same as GroundArea.elevation). " +
              "MUST exceed your tallest tile's elevation or the model never crests it.")]
     public float jumpHeight = 2f;
     [Tooltip("How long the ASCENT takes. The fall is separate and self-timing.")]
@@ -203,6 +241,14 @@ public class PlayerControl3 : MonoBehaviour
 
     private float elevation = 0f;
 
+    // ADDED (root lift pass): the footprint on the floor, unlifted. The root is drawn
+    // at groundPosition + elevation lift; every rules lookup uses this instead.
+    private Vector2 groundPosition;
+
+    // ADDED (root lift pass): read-only, so other scripts (sorting, camera, enemies)
+    // can ask for depth without being able to move the player. Encapsulation.
+    public Vector2 GroundPosition => groundPosition;
+
     private Vector2 lastSafePosition;
     private GroundArea lastSafeArea;
 
@@ -227,6 +273,11 @@ public class PlayerControl3 : MonoBehaviour
     [Tooltip("Log why sprint turned on or off, per key.")]
     public bool logSprint = false;
 
+    // ADDED (corner scale pass): off by default, so it costs nothing in normal play.
+    // Tick it only while finding out why the scale freeze lets go at platform1's corner.
+    [Tooltip("Log every ground-area change and whether the scale freeze is on.")]
+    public bool logAreaChanges = false;
+
 
     #endregion
 
@@ -240,7 +291,8 @@ public class PlayerControl3 : MonoBehaviour
         if (visualRoot == null)
         {
             Debug.LogError("PlayerControl3: visualRoot is not assigned. " +
-                           "Drag the Live2D model child onto it - jumping does nothing without it.", this);
+                           "Drag the visuals child (e.g. VisualsRoot) onto it - jumping does nothing without it.", this);
+            // Pass 4 (Live2D removal): message said "Drag the Live2D model child onto it".
         }
         else
         {
@@ -269,7 +321,11 @@ public class PlayerControl3 : MonoBehaviour
             shadowStartLocalPos = playerShadow.transform.localPosition;
         }
 
-        currentArea = GroundArea.AreaAt(transform.position);
+        // ADDED (root lift pass): the scene places the player on the floor, so the
+        // starting transform IS the footprint. Captured before anything lifts it.
+        groundPosition = transform.position;
+
+        currentArea = GroundArea.AreaAt(groundPosition);   // CHANGED (root lift pass): was transform.position
         if (enableBoundaryChecking && currentArea == null)
         {
             Debug.LogWarning("PlayerControl3: player did not start inside any GroundArea. " +
@@ -336,22 +392,29 @@ public class PlayerControl3 : MonoBehaviour
     // Single movement path, used by either Update or FixedUpdate.
     private void ApplyMovement(float deltaTime)
     {
-        Vector2 current = (rb != null) ? rb.position : (Vector2)transform.position;
+        // CHANGED (root lift pass): was (rb != null) ? rb.position : transform.position.
+        // The root is lifted now, so its position is no longer the footprint.
+        Vector2 current = groundPosition;
         Vector2 desired = current + moveVelocity * deltaTime;
         
+        // CHANGED (corner scale pass): both TEMP pit diagnosis blocks below are
+        // COMMENTED OUT, not deleted. WHY: they log every frame, which buried the
+        // [area] lines from LogAreaChange and slows play mode. Their original
+        // comments are untouched. Re-enable if the pit regresses.
+
         // TEMP (pit diagnosis): what does each lookup say at the player's target position?
         // Remove once the pit behaves.
-        GroundArea ruler = GroundArea.RulingAreaAt(desired);
-        GroundArea landing = GroundArea.AreaAt(desired);
-        Debug.Log($"ruler={(ruler ? ruler.name : "null")} fallThrough={(ruler ? ruler.canFallThrough.ToString() : "-")} " +
-          $"prio={(ruler ? ruler.priority.ToString() : "-")} | AreaAt={(landing ? landing.name : "null")} | " +
-          $"elev={elevation:F2} walkOff={(currentArea ? currentArea.allowWalkOffIntoGap.ToString() : "-")}");
+        // GroundArea ruler = GroundArea.RulingAreaAt(desired);
+        // GroundArea landing = GroundArea.AreaAt(desired);
+        // Debug.Log($"ruler={(ruler ? ruler.name : "null")} fallThrough={(ruler ? ruler.canFallThrough.ToString() : "-")} " +
+        //   $"prio={(ruler ? ruler.priority.ToString() : "-")} | AreaAt={(landing ? landing.name : "null")} | " +
+        //   $"elev={elevation:F2} walkOff={(currentArea ? currentArea.allowWalkOffIntoGap.ToString() : "-")}");
 
           // TEMP (pit diagnosis, second pass): currentArea should NEVER be a canFallThrough
           // area - AreaAt filters those out, so anything that sets one is using the wrong
           // lookup. Remove with the block above.
-          if (currentArea != null && currentArea.canFallThrough)
-          Debug.LogError($"currentArea is a fall-through area: {currentArea.name}", currentArea);
+          // if (currentArea != null && currentArea.canFallThrough)
+          // Debug.LogError($"currentArea is a fall-through area: {currentArea.name}", currentArea);
 
         if (enableBoundaryChecking && !isJumping && !isFalling)
         {
@@ -454,11 +517,41 @@ public class PlayerControl3 : MonoBehaviour
             ApplyHeights();
         }
 
-        if (rb != null)
-            rb.MovePosition(desired);
-        else
-            transform.position = new Vector3(desired.x, desired.y, transform.position.z);
+        // CHANGED (root lift pass): was rb.MovePosition(desired) / transform.position =
+        // desired. The footprint is stored, then the root is drawn lifted above it.
+        // Runs every frame - grounded, jumping and falling - so a fall that lowers
+        // 'elevation' in FallCoroutine is picked up here with no extra call.
+        groundPosition = desired;
+        PlaceRoot();
     }//end of function?
+
+
+    // ADDED (root lift pass): the ONE place the root's world position is written.
+    // World lift = elevation * GroundArea.ElevationToWorld - the SAME formula the
+    // pink walkable-preview gizmo uses, so the player now lands exactly on the
+    // outline you author against, at any depth.
+    // Note: jumpYOffset is NOT included - the arc stays on visualRoot, so the
+    // shadow and UI stay planted while the body arcs, as before.
+    private void PlaceRoot()
+    {
+        Vector2 drawn = groundPosition + Vector2.up * (elevation * GroundArea.ElevationToWorld);
+
+        if (rb != null)
+            rb.MovePosition(drawn);
+        else
+            transform.position = new Vector3(drawn.x, drawn.y, transform.position.z);
+    }// end of function >:D
+
+
+    // ADDED (root lift pass): elevation units -> local units of a child of the root.
+    // The root's scale IS currentScale (AdjustPlayerScale), and a child's local
+    // offset is multiplied by it, so dividing here cancels that out and leaves a
+    // fixed world distance. AdjustPlayerScale clamps scale to 0.01 minimum, so the
+    // divide is always safe.
+    private float ToLocalLift(float elevationUnits)
+    {
+        return elevationUnits * GroundArea.ElevationToWorld / currentScale;
+    }// end of function >:D
 
 
     private void ApplyHeights()
@@ -466,7 +559,11 @@ public class PlayerControl3 : MonoBehaviour
         if (visualRoot != null)
         {
             Vector3 lp = visualStartLocalPos;
-            lp.y = visualStartLocalPos.y + jumpYOffset + elevation;
+            // CHANGED (root lift pass): was + jumpYOffset + elevation. The root now
+            // carries elevation, so adding it here would lift the body twice. Only
+            // the jump arc remains, converted through ToLocalLift so it is in the
+            // same units the root uses - that is what stops the pop at the apex.
+            lp.y = visualStartLocalPos.y + ToLocalLift(jumpYOffset);
             visualRoot.localPosition = lp;
 
             // CHANGED (depth decoupling): elevation is divided by currentScale so the
@@ -481,20 +578,24 @@ public class PlayerControl3 : MonoBehaviour
             //
             // jumpYOffset is deliberately NOT divided: the arc SHOULD look bigger up
             // close, and JumpCoroutine already multiplies it by scale for that reason.
-            float lift = (currentScale > 0.0001f)
-                ? elevation * GroundArea.ElevationToWorld / currentScale
-                : elevation * GroundArea.ElevationToWorld;
-    
+            // REMOVED (root lift pass): float lift = ... - it was computed but never
+            // applied, so it did nothing. Its idea (a fixed world lift at any depth)
+            // is now done by PlaceRoot, which skips the divide entirely because the
+            // root is in world space.
         }
 
         if (playerShadow == null) return;
 
         float groundHeight = (shadowGround != null)
-            ? shadowGround.ElevationAt(transform.position)
+            ? shadowGround.ElevationAt(groundPosition)   // CHANGED (root lift pass): was transform.position
             : elevation;
 
+        // CHANGED (root lift pass): was + groundHeight. The shadow is a child of the
+        // lifted root, so it is placed by the DIFFERENCE between the ground under it
+        // and the player's own height. Standing: 0, sits at the feet. Over a pit or
+        // jumping off a ledge: negative, stays down on the lower ground.
         Vector3 sp = shadowStartLocalPos;
-        sp.y = shadowStartLocalPos.y + groundHeight;
+        sp.y = shadowStartLocalPos.y + ToLocalLift(groundHeight - elevation);
         playerShadow.transform.localPosition = sp;
 
         float heightAboveGround = jumpYOffset + (elevation - groundHeight);
@@ -514,7 +615,7 @@ public class PlayerControl3 : MonoBehaviour
         float baseY    = visualStartLocalPos.y;
         float localY   = visualRoot.localPosition.y;
         float applied  = localY - baseY;              // what is actually on the transform
-        float intended = jumpYOffset + elevation;      // what ApplyHeights composes
+        float intended = ToLocalLift(jumpYOffset);     // what ApplyHeights composes - CHANGED (root lift pass): elevation lives on the root now
         float parentScaleY = (visualRoot.parent != null) ? visualRoot.parent.lossyScale.y : 1f;
 
         Debug.Log(
@@ -541,6 +642,26 @@ public class PlayerControl3 : MonoBehaviour
     }// end of function >:D
 
 
+    // ADDED (corner scale pass): reports one SetArea call - the area we left, the
+    // area we entered, and whether the scale freeze is on afterwards. Kept separate
+    // from SetArea so that function keeps its single job - this one only reads and
+    // prints, same pattern as LogSprint and LogVisualHeight above.
+    //
+    // HOW TO READ IT: one line as you reach the corner = your feet left the polygon.
+    // Lines flipping back and forth = you are standing ON the edge line. A change
+    // with falling=True = the landing picked the wrong tile. No line at all while
+    // the scale still changes = something else is writing the scale.
+    private void LogAreaChange(GroundArea previous, GroundArea next)
+    {
+        if (!logAreaChanges) return;
+
+        Debug.Log(
+            $"[area] {(previous ? previous.name : "null")} -> {(next ? next.name : "null")} " +
+            $"frozen={scaleIsFrozen} scale={currentScale:F3} pos={groundPosition} " +   // CHANGED (root lift pass): footprint, not the lifted root
+            $"jumping={isJumping} falling={isFalling} frame={Time.frameCount}", this);
+    }// end of function >:D
+
+
 
     private void SetShadowVisible(bool visible)
     {
@@ -551,19 +672,30 @@ public class PlayerControl3 : MonoBehaviour
 
     private void SetArea(GroundArea area)
     {
+        // ADDED (corner scale pass): remember the outgoing area BEFORE it is
+        // overwritten on the next line, so the log can show where we came from.
+        GroundArea previous = currentArea;
+
         currentArea = area;
-        elevation = (area != null) ? area.ElevationAt(transform.position) : 0f;
+        // CHANGED (root lift pass): both reads below were transform.position. The root
+        // is lifted, so a "safe position" saved from it would teleport a recovering
+        // player to a spot further back in the room.
+        elevation = (area != null) ? area.ElevationAt(groundPosition) : 0f;
 
         if (area != null)
         {
             lastSafeArea = area;
-            lastSafePosition = transform.position;
+            lastSafePosition = groundPosition;
         }
 
         // ADDED: capture the scale at the moment this area is adopted, before
         // AdjustPlayerScale can change it further. Read by AdjustPlayerScale below.
         scaleIsFrozen = area != null && area.freezeScaleWhileOn;
         if (scaleIsFrozen) frozenScale = currentScale;
+
+        // ADDED (corner scale pass): placed AFTER the freeze is decided so the
+        // logged 'frozen=' value is the one that now applies.
+        LogAreaChange(previous, area);
 
         ApplyHeights();
 
@@ -655,7 +787,7 @@ public class PlayerControl3 : MonoBehaviour
     {
         if (visualRoot == null) yield break;
 
-        if (!GroundArea.CanJumpOverPoint(transform.position)) yield break;
+        if (!GroundArea.CanJumpOverPoint(groundPosition)) yield break;   // CHANGED (root lift pass): was transform.position
 
         isJumping = true;
         float startElevation = elevation;
@@ -680,7 +812,7 @@ public class PlayerControl3 : MonoBehaviour
 
             jumpYOffset = Mathf.Sin(t * Mathf.PI * 0.5f) * jumpHeight * scale;
 
-            GroundArea under = TileStep.JumpTarget(transform.position, startElevation, effectiveMaxStepUp);
+            GroundArea under = TileStep.JumpTarget(groundPosition, startElevation, effectiveMaxStepUp);   // CHANGED (root lift pass)
             shadowGround = under;
 
             gapTime = (under == null) ? gapTime + Time.deltaTime : 0f;
@@ -749,16 +881,19 @@ public class PlayerControl3 : MonoBehaviour
             // CHANGED (ownership pass): was the raw maxStepUp field. That ignored
             // any per-area value, so a jump's ascent and its descent could search
             // different heights on the same area. Now resolved, once, above.
-            GroundArea tile = TileStep.JumpTarget(transform.position, fromElevation, effectiveMaxStepUp);
+            // CHANGED (root lift pass): every transform.position in this loop is now
+            // groundPosition - the root sinks as 'elevation' drops, so asking the root
+            // would measure tiles from a point that is moving through the room.
+            GroundArea tile = TileStep.JumpTarget(groundPosition, fromElevation, effectiveMaxStepUp);
 
-            if (useDropTarget && tile != null && tile.ElevationAt(transform.position) > previousHeight)
-                tile = TileStep.DropTarget(transform.position, previousHeight);
+            if (useDropTarget && tile != null && tile.ElevationAt(groundPosition) > previousHeight)
+                tile = TileStep.DropTarget(groundPosition, previousHeight);
 
             shadowGround = tile;
             gapTime = (tile == null) ? gapTime + Time.deltaTime : 0f;
             SetShadowVisible(tile != null || gapTime < shadowHideDelay);
 
-            float tileHeight = (tile != null) ? tile.ElevationAt(transform.position) : 0f;
+            float tileHeight = (tile != null) ? tile.ElevationAt(groundPosition) : 0f;
 
             bool crossed = tile != null && previousHeight > tileHeight && elevation <= tileHeight;
 
@@ -770,7 +905,7 @@ public class PlayerControl3 : MonoBehaviour
                 yield break;
             }
 
-            if (fallGuard != null && elevation <= fallGuard.ElevationAt(transform.position))
+            if (fallGuard != null && elevation <= fallGuard.ElevationAt(groundPosition))
             {
                 isFalling = false;
                 SetArea(fallGuard);
@@ -782,7 +917,10 @@ public class PlayerControl3 : MonoBehaviour
             if (elevation < effectiveFallFloor)
             {
                 isFalling = false;
-                transform.position = lastSafePosition;
+                // CHANGED (root lift pass): was transform.position = lastSafePosition.
+                // Moving the footprint is enough - SetArea restores the height and the
+                // next ApplyMovement's PlaceRoot draws the root there.
+                groundPosition = lastSafePosition;
                 SetArea(lastSafeArea);
                 LogVisualHeight("land-on-fallfloor-recovery");
                 yield break;
@@ -800,7 +938,10 @@ public class PlayerControl3 : MonoBehaviour
         // therefore transform.localScale) holds steady at whatever it was on entry.
         if (scaleIsFrozen) return;
 
-        float rawScale = PlayerScale * (PlayerRatio - transform.position.y);
+        // CHANGED (root lift pass): was transform.position.y. Depth comes from the
+        // footprint - otherwise standing on a platform would shrink the player as if
+        // they had walked toward the back wall.
+        float rawScale = PlayerScale * (PlayerRatio - groundPosition.y);
         rawScale = Mathf.Max(rawScale, 0.01f);
 
         currentScale = rawScale;
