@@ -46,6 +46,25 @@
 // SIDE EFFECTS to expect: every child of the root (VisualsRoot, GroundPoint,
 //   Circle, ItemHolder, PlayerUI) and any collider on it now rise with the jump.
 //   A shadow child will rise too - disable it until the shadow comes back.
+//
+// ADDED (unnested shadow pass): the platform shadow is back, as a SEPARATE scene
+//   object - not a child of the root. WHY: a child rides up with the jump and
+//   inherits the root's scale, which is what forced the old divide-by-scale maths.
+//   A separate object is simply PLACED in the world each frame, so neither applies.
+//   * PlaceShadow() - the one place the shadow is written. Called right after
+//     PlaceRoot, so the player and its shadow are always drawn from the same numbers.
+//   * Position: the footprint, lifted to the height of the ground UNDER the player
+//     (not the player's own height) - so it stays on the floor during a jump.
+//   * Hidden over a gap, after shadowHideDelay so narrow gaps do not flicker. Same
+//     rule as PlayerControl3, but the timer now lives in PlaceShadow instead of
+//     being repeated in both coroutines (DRY).
+//   * Size: shadowSize * the player's current scale, shrunk a little the higher
+//     the player is - same shrink formula as PlayerControl3.
+//   * The coroutines only choose WHICH ground the shadow sits on (shadowGround);
+//     they no longer draw anything.
+//   FIXED with it: currentScale now starts from the scene's scale instead of 1f.
+//   The shadow multiplies by it, so a freeze area entered at startup would otherwise
+//   shrink the shadow to scale 1 until the freeze ended.
 
 using System.Collections;
 using UnityEngine;
@@ -104,6 +123,25 @@ public class PlayerControl4 : MonoBehaviour
 
     [Tooltip("Elevation units per second squared. Higher = heavier.")]
     public float fallAcceleration = 20f;
+
+    // ADDED (unnested shadow pass): see header.
+    [Header("Shadow")]
+    [Tooltip("A SEPARATE scene object, NOT a child of the player. The script places it on the ground under the player every frame. Leave empty for no shadow.")]
+    public Transform playerShadow;
+
+    [Tooltip("Shadow scale when the player's scale is 1. Multiplied by the player's current scale. " +
+             "To match the old nested shadow, copy the Scale it had as a child.")]
+    public Vector3 shadowSize = Vector3.one;
+
+    [Tooltip("Nudge from the footprint, multiplied by the player's current scale. " +
+             "To match the old nested shadow, copy the Position it had as a child.")]
+    public Vector2 shadowOffset = Vector2.zero;
+
+    [Tooltip("Seconds over open space before the shadow is hidden. 0 = hide the instant there is no ground below.")]
+    public float shadowHideDelay = 0.08f;
+
+    private GroundArea shadowGround;   // the ground the shadow sits on - null over a gap
+    private float gapTime = 0f;        // how long there has been nothing below
 
     [Tooltip("Keep moving at takeoff speed if the movement keys are released mid-jump. Off = hard stop in the air.")]
     public bool JumpCarryOver = true;
@@ -178,6 +216,19 @@ public class PlayerControl4 : MonoBehaviour
         // The scene places the player on the floor, so the starting transform IS the
         // footprint. Captured before anything lifts it.
         groundPosition = transform.position;
+
+        // ADDED (unnested shadow pass): start from the REAL scene scale, not the
+        // field's 1f. SetArea below can freeze the scale before AdjustPlayerScale
+        // has ever run, and the shadow's size multiplies by this number.
+        currentScale = transform.localScale.y;
+
+        if (playerShadow != null && playerShadow.IsChildOf(transform))
+        {
+            // ADDED (unnested shadow pass): a nested shadow would rise with the jump
+            // and get the root's scale on top of shadowSize.
+            Debug.LogWarning("PlayerControl4: playerShadow is a child of the player. " +
+                             "Drag it out of the player in the Hierarchy so it stays on the ground.", this);
+        }
 
         currentArea = GroundArea.AreaAt(groundPosition);
         if (enableBoundaryChecking && currentArea == null)
@@ -335,7 +386,50 @@ public class PlayerControl4 : MonoBehaviour
 
         groundPosition = desired;
         PlaceRoot();
+        PlaceShadow(deltaTime);   // ADDED (unnested shadow pass): drawn from the same numbers, same frame
     }//end of function >:D
+
+
+    // ADDED (unnested shadow pass): the ONE place the shadow is written.
+    // Three jobs, in order: hide it over a gap, put it on the ground, size it.
+    private void PlaceShadow(float deltaTime)
+    {
+        if (playerShadow == null) return;
+
+        // 1. Hide over a gap - but only after shadowHideDelay, so a narrow gap does
+        //    not make it flicker. gapTime counts up while there is nothing below.
+        gapTime = (shadowGround == null) ? gapTime + deltaTime : 0f;
+        bool visible = shadowGround != null || gapTime < shadowHideDelay;
+
+        if (playerShadow.gameObject.activeSelf != visible)
+            playerShadow.gameObject.SetActive(visible);
+
+        if (!visible) return;   // nothing to place
+
+        // 2. Put it on the ground. The height of the ground UNDER the player, not the
+        //    player's own height - that is what keeps it down during a jump. During
+        //    the short delay over a gap there is no ground, so it holds the player's
+        //    height for those few frames, as PlayerControl3 did.
+        float groundHeight = (shadowGround != null)
+            ? shadowGround.ElevationAt(groundPosition)
+            : elevation;
+
+        Vector2 spot = groundPosition
+                     + shadowOffset * currentScale
+                     + Vector2.up * (groundHeight * GroundArea.ElevationToWorld);
+
+        // Setting .position (world) rather than .localPosition: no parent is involved,
+        // so nothing gets multiplied by the player's scale behind our back.
+        playerShadow.position = new Vector3(spot.x, spot.y, playerShadow.position.z);
+
+        // 3. Size it. Same shrink as PlayerControl3: a full jump above the ground
+        //    makes it 10% smaller. heightAboveGround / jumpHeight = "how much of a
+        //    full jump am I above the ground" - 0 standing, 1 at the top of a jump.
+        float heightAboveGround = (elevation + jumpYOffset) - groundHeight;
+        float shrink = (jumpHeight > 0f) ? 1f - (heightAboveGround / jumpHeight) * 0.1f : 1f;
+
+        playerShadow.localScale = shadowSize * (currentScale * shrink);
+    }// end of function >:D
 
 
     // CHANGED (root only pass): the ONE place the root's position is written, and
@@ -418,6 +512,10 @@ public class PlayerControl4 : MonoBehaviour
 
         // REMOVED (root only pass): ApplyHeights(), and the gapTime / shadowGround /
         // SetShadowVisible lines. The next ApplyMovement draws the new height.
+
+        // ADDED (unnested shadow pass): standing on an area = the shadow sits on it.
+        shadowGround = area;
+        gapTime = 0f;
     }// end of function >:D
 
 
@@ -497,6 +595,12 @@ public class PlayerControl4 : MonoBehaviour
             // REMOVED (root only pass): the shadow lookup and ApplyHeights() that
             // were here. This loop now only changes the number; PlaceRoot draws it.
 
+            // ADDED (unnested shadow pass): which ground is below right now - the
+            // highest tile this jump could reach, or null over a gap. Same lookup
+            // PlayerControl3 used, so the shadow snaps onto a platform as you pass
+            // over it. PlaceShadow does the drawing.
+            shadowGround = TileStep.JumpTarget(groundPosition, startElevation, effectiveMaxStepUp);
+
             // Released and past the minimum - stop rising and let the descent take over.
             if (!Input.GetKey(KeyCode.Space) && jumpYOffset >= minRise) break;
 
@@ -549,6 +653,9 @@ public class PlayerControl4 : MonoBehaviour
                 tile = TileStep.DropTarget(groundPosition, previousHeight);
 
             // REMOVED (root only pass): shadowGround / gapTime / SetShadowVisible.
+            // ADDED (unnested shadow pass): shadowGround is back - the tile the fall
+            // is heading for, or null over a gap. PlaceShadow does the rest.
+            shadowGround = tile;
 
             float tileHeight = (tile != null) ? tile.ElevationAt(groundPosition) : 0f;
 
