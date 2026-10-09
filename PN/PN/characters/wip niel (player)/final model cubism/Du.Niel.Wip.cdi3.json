@@ -1,0 +1,108 @@
+{
+	"Version": 3,
+	"Parameters": [
+		{
+			"Id": "right_opacity_toggleParam",
+			"GroupId": "ParamGroup",
+			"Name": "right_opacity_toggle"
+		},
+		{
+			"Id": "headTurnRParam",
+			"GroupId": "ParamGroup",
+			"Name": "headTurnR"
+		},
+		{
+			"Id": "BackArmSwayParam",
+			"GroupId": "ParamGroup",
+			"Name": "BackArmSway"
+		},
+		{
+			"Id": "BodyBreathParam",
+			"GroupId": "ParamGroup",
+			"Name": "BodyBreath R"
+		},
+		{
+			"Id": "HeadXParam",
+			"GroupId": "ParamGroup",
+			"Name": "HeadX"
+		},
+		{
+			"Id": "BackArmDrawOrderParam",
+			"GroupId": "ParamGroup",
+			"Name": "BackArmDrawOrder"
+		},
+		{
+			"Id": "walkStrengthRightParam",
+			"GroupId": "ParamGroup",
+			"Name": "BackWalkArmSwingRight"
+		},
+		{
+			"Id": "left_opacity_toggleParam",
+			"GroupId": "ParamGroup2",
+			"Name": "left_opacity_toggle"
+		},
+		{
+			"Id": "headTurnLParam",
+			"GroupId": "ParamGroup2",
+			"Name": "headTurnL"
+		},
+		{
+			"Id": "backArmSwayLParam",
+			"GroupId": "ParamGroup2",
+			"Name": "backArmSwayL"
+		},
+		{
+			"Id": "BodyBreathLParam",
+			"GroupId": "ParamGroup2",
+			"Name": "BodyBreath L"
+		},
+		{
+			"Id": "BackArmDrawOrder_LParam2",
+			"GroupId": "ParamGroup2",
+			"Name": "BackArmDrawOrder_L"
+		},
+		{
+			"Id": "HeadXParam_L",
+			"GroupId": "ParamGroup2",
+			"Name": "HeadX_L"
+		}
+	],
+	"ParameterGroups": [
+		{
+			"Id": "ParamGroup",
+			"GroupId": "",
+			"Name": "right"
+		},
+		{
+			"Id": "ParamGroup2",
+			"GroupId": "",
+			"Name": "left"
+		}
+	],
+	"Parts": [
+		{
+			"Id": "Part4",
+			"Name": "idle rest right"
+		},
+		{
+			"Id": "Part5",
+			"Name": "idle rest left"
+		},
+		{
+			"Id": "Part",
+			"Name": "head"
+		},
+		{
+			"Id": "Part3",
+			"Name": "FrontArm"
+		},
+		{
+			"Id": "Part2",
+			"Name": "BackArm"
+		},
+		{
+			"Id": "Part6",
+			"Name": "BackArm_L"
+		}
+	]
+}

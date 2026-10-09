@@ -17,7 +17,7 @@
 //      down, so their SUM - the only thing the root reads - does not change. No
 //      hand-off between two objects, so nothing can pop or dip.
 //
-// REMOVED from PlayerControl3 (Trent asked for these to go):
+// REMOVED from PlayerControl3:
 //   * visualRoot, visualStartLocalPos and the "visualRoot is not assigned" check.
 //     VisualsRoot is no longer moved by script - it simply rides inside the root.
 //   * playerShadow, shadowStartScale, shadowStartLocalPos, shadowHideDelay,
