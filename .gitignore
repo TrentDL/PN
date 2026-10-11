@@ -57,3 +57,11 @@ sysinfo.txt
 
 # Crashlytics generated file
 crashlytics-build.properties
+
+# FMOD Studio project user data and local caches
+.cache/
+.unsaved/
+.user/
+.restore/
+.fsbcache/
+.recycle/
