@@ -86,6 +86,8 @@ public class PlayerControl4 : MonoBehaviour
 
     private Rigidbody2D rb;              // MAY BE NULL - always guard
     private Dash dash;
+
+    private Knockback knockback;
     private Vector2 moveInput;
     private Vector2 moveVelocity;
 
@@ -206,6 +208,8 @@ public class PlayerControl4 : MonoBehaviour
 
         dash = GetComponent<Dash>();         // fine if null - no Dash component, no dash
 
+        knockback = GetComponent<Knockback>();
+
         // REMOVED (root only pass): the visualRoot check and the shadow setup.
 
         if (animator == null)
@@ -251,6 +255,9 @@ public class PlayerControl4 : MonoBehaviour
 
         if (dash != null && dash.IsDashing) moveVelocity = dash.Velocity;
 
+        if (knockback != null && knockback.IsKnockedBack) moveVelocity = knockback.Velocity;
+
+
         UpdateFacing();
         AdjustPlayerScale();
         ApplyScaleToSpeed();
@@ -262,6 +269,9 @@ public class PlayerControl4 : MonoBehaviour
         }
 
         if (rb == null) ApplyMovement(Time.deltaTime);
+
+
+        
     }//end of function >:D
 
 
