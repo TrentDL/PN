@@ -596,6 +596,10 @@ PrefabInstance:
       propertyPath: m_IsActive
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: -8213903254063033955, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
+      propertyPath: m_Name
+      value: Folder 1 Copy
+      objectReference: {fileID: 0}
     - target: {fileID: -7552582706839291426, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
       propertyPath: m_LocalScale.x
       value: 0.99999994
@@ -652,6 +656,14 @@ PrefabInstance:
       propertyPath: m_ConstrainProportionsScale
       value: 1
       objectReference: {fileID: 0}
+    - target: {fileID: -3897083906867620298, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
+      propertyPath: m_Name
+      value: Folder 2
+      objectReference: {fileID: 0}
+    - target: {fileID: 1181135729824789015, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
+      propertyPath: m_Name
+      value: idle1
+      objectReference: {fileID: 0}
     - target: {fileID: 6766485126959075108, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
       propertyPath: m_LocalPosition.y
       value: 10.93642
@@ -672,27 +684,7 @@ PrefabInstance:
     - targetCorrespondingSourceObject: {fileID: -8653719598885068355, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
       insertIndex: -1
       addedObject: {fileID: 4580361228938089779}
-    - targetCorrespondingSourceObject: {fileID: -1916443485916782292, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
-      insertIndex: -1
-      addedObject: {fileID: 5128735950115319356}
   m_SourcePrefab: {fileID: 4843985084834002234, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
---- !u!1 &31102353133699403 stripped
-GameObject:
-  m_CorrespondingSourceObject: {fileID: -1916443485916782292, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}
-  m_PrefabInstance: {fileID: 7280371855971000423}
-  m_PrefabAsset: {fileID: 0}
---- !u!210 &5128735950115319356
-SortingGroup:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 31102353133699403}
-  m_Enabled: 1
-  m_SortingLayerID: 0
-  m_SortingLayer: 0
-  m_SortingOrder: 0
-  m_SortAtRoot: 0
 --- !u!1 &7128877696204505562 stripped
 GameObject:
   m_CorrespondingSourceObject: {fileID: -8653719598885068355, guid: 7025fd3ccff5b6c49a865803558a8cbb, type: 3}

@@ -2,15 +2,9 @@ using UnityEngine;
 
 public class ItemsManager : MonoBehaviour
 {
-    // Start is called once before the first execution of Update after the MonoBehaviour is created
-    void Start()
-    {
-        
-    }
+    /*TODO:
 
-    // Update is called once per frame
-    void Update()
-    {
-        
-    }
+
+   */ 
+    
 }
