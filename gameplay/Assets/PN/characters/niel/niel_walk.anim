@@ -139,7 +139,7 @@ AnimationClip:
       m_PostInfinity: 2
       m_RotationOrder: 4
     attribute: m_IsActive
-    path: tl.niel.wip/niel_right/idle1_1
+    path: tl.niel.wip/niel_left
     classID: 1
     script: {fileID: 0}
     flags: 0
@@ -160,7 +160,7 @@ AnimationClip:
       m_PostInfinity: 2
       m_RotationOrder: 4
     attribute: m_IsActive
-    path: tl.niel.wip/niel_left
+    path: tl.niel.wip/niel_right/idle1
     classID: 1
     script: {fileID: 0}
     flags: 0
@@ -218,7 +218,7 @@ AnimationClip:
       isIntCurve: 0
       isSerializeReferenceCurve: 0
     - serializedVersion: 2
-      path: 3059451352
+      path: 3048703237
       attribute: 2086281974
       script: {fileID: 0}
       typeID: 1
@@ -227,7 +227,7 @@ AnimationClip:
       isIntCurve: 0
       isSerializeReferenceCurve: 0
     - serializedVersion: 2
-      path: 3048703237
+      path: 362003285
       attribute: 2086281974
       script: {fileID: 0}
       typeID: 1
@@ -379,7 +379,7 @@ AnimationClip:
       m_PostInfinity: 2
       m_RotationOrder: 4
     attribute: m_IsActive
-    path: tl.niel.wip/niel_right/idle1_1
+    path: tl.niel.wip/niel_left
     classID: 1
     script: {fileID: 0}
     flags: 0
@@ -400,7 +400,7 @@ AnimationClip:
       m_PostInfinity: 2
       m_RotationOrder: 4
     attribute: m_IsActive
-    path: tl.niel.wip/niel_left
+    path: tl.niel.wip/niel_right/idle1
     classID: 1
     script: {fileID: 0}
     flags: 0
