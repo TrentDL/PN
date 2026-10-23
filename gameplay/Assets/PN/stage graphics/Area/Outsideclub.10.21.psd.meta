@@ -152,8 +152,8 @@ ScriptedImporter:
     customData: 
     rect:
       serializedVersion: 2
-      x: 5707
-      y: 1643
+      x: 7224
+      y: 2410
       width: 707
       height: 261
     spriteID: 9c80984a5aca67f4cbac2c96708a459f
@@ -164,7 +164,7 @@ ScriptedImporter:
     indices: 
     edges: []
     tessellationDetail: 0
-    uvTransform: {x: 5707, y: 1643}
+    uvTransform: {x: 7224, y: 2410}
     spritePosition: {x: 2363, y: 1298}
   - name: Sign
     originalName: 
@@ -174,8 +174,8 @@ ScriptedImporter:
     customData: 
     rect:
       serializedVersion: 2
-      x: 5707
-      y: 1912
+      x: 7712
+      y: 1883
       width: 442
       height: 335
     spriteID: 61c9a72364d75a14399a16c107d74b73
@@ -186,7 +186,7 @@ ScriptedImporter:
     indices: 
     edges: []
     tessellationDetail: 0
-    uvTransform: {x: 5707, y: 1912}
+    uvTransform: {x: 7712, y: 1883}
     spritePosition: {x: 1527, y: 1115}
   - name: Windowsabovedoor
     originalName: 
@@ -196,7 +196,7 @@ ScriptedImporter:
     customData: 
     rect:
       serializedVersion: 2
-      x: 7588
+      x: 7224
       y: 1883
       width: 480
       height: 519
@@ -208,7 +208,7 @@ ScriptedImporter:
     indices: 
     edges: []
     tessellationDetail: 0
-    uvTransform: {x: 7588, y: 1883}
+    uvTransform: {x: 7224, y: 1883}
     spritePosition: {x: 1990, y: 948}
   - name: Posters
     originalName: 
@@ -218,8 +218,8 @@ ScriptedImporter:
     customData: 
     rect:
       serializedVersion: 2
-      x: 7224
-      y: 1883
+      x: 5707
+      y: 1643
       width: 356
       height: 719
     spriteID: 80779af4f3b7c1846a72d6dd4f40d8dc
@@ -230,8 +230,8 @@ ScriptedImporter:
     indices: 
     edges: []
     tessellationDetail: 0
-    uvTransform: {x: 7224, y: 1883}
-    spritePosition: {x: 2419, y: 318}
+    uvTransform: {x: 5707, y: 1643}
+    spritePosition: {x: 2414, y: 420}
   - name: Door New
     originalName: 
     pivot: {x: 0.5, y: 0.5}
@@ -497,7 +497,7 @@ ScriptedImporter:
     parentIndex: -1
     spriteID: 9c80984a5aca67f4cbac2c96708a459f
     layerID: 921904999
-    mosaicPosition: {x: 5707, y: 1643}
+    mosaicPosition: {x: 7224, y: 2410}
     flatten: 0
     isImported: 1
     isVisible: 1
@@ -507,7 +507,7 @@ ScriptedImporter:
     parentIndex: -1
     spriteID: 61c9a72364d75a14399a16c107d74b73
     layerID: 1084867387
-    mosaicPosition: {x: 5707, y: 1912}
+    mosaicPosition: {x: 7712, y: 1883}
     flatten: 0
     isImported: 1
     isVisible: 1
@@ -517,7 +517,7 @@ ScriptedImporter:
     parentIndex: -1
     spriteID: 452871c8af4eaf34fa4ff370b9b01d69
     layerID: 1281733964
-    mosaicPosition: {x: 7588, y: 1883}
+    mosaicPosition: {x: 7224, y: 1883}
     flatten: 0
     isImported: 1
     isVisible: 1
@@ -527,7 +527,7 @@ ScriptedImporter:
     parentIndex: -1
     spriteID: 80779af4f3b7c1846a72d6dd4f40d8dc
     layerID: -405723316
-    mosaicPosition: {x: 7224, y: 1883}
+    mosaicPosition: {x: 5707, y: 1643}
     flatten: 0
     isImported: 1
     isVisible: 1
