@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<elements  source="Harmony Essentials (HarmonyEssentials.exe) version 27.0.0 build 25340 2026-06-18 11:38:26" version="2700" build="25340" date="Wed Oct 28 00:18:49 2026" timeMsec="1793164729468" username="Trent" realUsername="Trent">
+ <element id="1" elementName="BG" elementFolder="BG" pixmapFormat="2" scanType="2" fieldChart="12" vectorType="2" rootFolder="elements"/>
+ <element id="2" elementName="landsberger_Level_Assets" elementFolder="landsberger_Level_Assets" pixmapFormat="10" scanType="2" fieldChart="12" vectorType="0" rootFolder="elements"/>
+ <element id="3" elementName="Drawing" elementFolder="Drawing" pixmapFormat="2" scanType="2" fieldChart="12" vectorType="2" rootFolder="elements"/>
+ <element id="4" elementName="turn_table" elementFolder="turn_table" pixmapFormat="2" scanType="2" fieldChart="12" vectorType="2" rootFolder="elements"/>
+</elements>
